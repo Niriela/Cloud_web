@@ -62,38 +62,74 @@ const samplePoints = [
 ];
 
 export default function Visiteurs() {
-  return (
-    <div className="relative flex h-full w-full min-h-[600px] rounded-xl overflow-hidden">
-      <MapContainer
-        center={[-18.879, 47.507] as LatLngExpression}
-        zoom={13}
-        style={{ height: '100%', width: '100%' }}
-      >
-        <LayersControl position="topright">
-          <BaseLayer checked name="OpenStreetMap">
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          </BaseLayer>
-          <BaseLayer name="Satellite">
-            <TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" />
-          </BaseLayer>
-        </LayersControl>
+  const pointTypes: Array<{ type: PointType; label: string }> = [
+    { type: 'travaux', label: 'En construction' },
+    { type: 'accident', label: 'Accident' },
+    { type: 'nid-de-poule', label: 'Nid de poule' },
+    { type: 'repare', label: 'Réparé' },
+    { type: 'abime', label: 'Abîmé' },
+    { type: 'alerte', label: 'Alerte' },
+    { type: 'zone-rouge', label: 'Zone rouge' },
+    { type: 'eau', label: 'Fuite / eau' },
+    { type: 'eft', label: 'EFT' },
+  ];
 
-        {samplePoints.map((p) => (
-          <Marker
-            key={p.id}
-            position={[p.lat, p.lng]}
-            icon={getIconForType(p.type as PointType)}
-          >
-            <Popup>
-              <strong>{p.title}</strong>
-              <br />
-              {p.desc}
-              <br />
-              Type: {p.type}
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
+  return (
+    <div className="flex h-screen w-full overflow-hidden gap-4 p-4">
+      {/* Carte - 75% */}
+      <div className="flex-1 rounded-lg overflow-hidden bg-gray-100">
+        <MapContainer
+          center={[-18.879, 47.507] as LatLngExpression}
+          zoom={13}
+          style={{ height: '100%', width: '100%' }}
+        >
+          <LayersControl position="topright">
+            <BaseLayer checked name="OpenStreetMap">
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            </BaseLayer>
+            <BaseLayer name="Satellite">
+              <TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" />
+            </BaseLayer>
+          </LayersControl>
+
+          {samplePoints.map((p) => (
+            <Marker
+              key={p.id}
+              position={[p.lat, p.lng]}
+              icon={getIconForType(p.type as PointType)}
+            >
+              <Popup>
+                <strong>{p.title}</strong>
+                <br />
+                {p.desc}
+                <br />
+                Type: {p.type}
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      </div>
+
+      {/* Légende - 25% */}
+      <div className="w-1/4 bg-white rounded-lg shadow-lg p-4 overflow-y-auto">
+        <h3 className="font-semibold text-sm mb-4 text-gray-800">Légende</h3>
+        <div className="space-y-3">
+          {pointTypes.map((item) => (
+            <div key={item.type} className="flex items-center gap-2">
+              <div
+                className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full text-base"
+                style={{
+                  backgroundColor: '#fff',
+                  border: `3px solid ${colorForType(item.type)}`,
+                }}
+              >
+                {emojiForType[item.type]}
+              </div>
+              <span className="text-xs text-gray-700">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
