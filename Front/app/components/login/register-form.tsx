@@ -10,6 +10,7 @@ import {
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
 import { register } from "~/lib/api"
+import { useAuth } from "~/components/auth/auth-provider"
 import { useState } from "react"
 import { useNavigate } from "react-router"
 
@@ -18,6 +19,7 @@ export function RegisterForm({
   ...props
 }: React.ComponentProps<"div">) {
   const navigate = useNavigate()
+  const { setSession } = useAuth()
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [email, setEmail] = useState("")
@@ -37,8 +39,7 @@ export function RegisterForm({
         firstName,
         lastName,
       })
-      localStorage.setItem("auth_token", response.token)
-      localStorage.setItem("auth_user", JSON.stringify(response))
+      setSession(response)
       navigate("/Visiteurs")
     } catch (err) {
       const message =

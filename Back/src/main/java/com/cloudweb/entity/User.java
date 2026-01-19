@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "users")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -32,6 +33,10 @@ public class User {
 
     @Column(nullable = false)
     private LocalDateTime date;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer failedLoginAttempts = 0;
 
     @ManyToOne
     @JoinColumn(name = "statuts_user_id")

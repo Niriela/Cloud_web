@@ -10,6 +10,7 @@ import {
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
 import { login } from "~/lib/api"
+import { useAuth } from "~/components/auth/auth-provider"
 import { useState } from "react"
 import { useNavigate } from "react-router"
 
@@ -18,6 +19,7 @@ export function LoginForm({
   ...props
 }: React.ComponentProps<"div">) {
   const navigate = useNavigate()
+  const { setSession } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -30,8 +32,7 @@ export function LoginForm({
 
     try {
       const response = await login({ email, password })
-      localStorage.setItem("auth_token", response.token)
-      localStorage.setItem("auth_user", JSON.stringify(response))
+      setSession(response)
       navigate("/Visiteurs")
     } catch (err) {
       const message =

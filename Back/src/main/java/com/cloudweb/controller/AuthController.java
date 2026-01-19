@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class AuthController {
 
     private final AuthService authService;
@@ -32,5 +32,11 @@ public class AuthController {
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("API is running");
+    }
+
+    @PostMapping("/reset-block")
+    public ResponseEntity<Void> resetBlock(@RequestParam Long userId) {
+        authService.resetUserBlock(userId);
+        return ResponseEntity.noContent().build();
     }
 }

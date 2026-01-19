@@ -2,27 +2,21 @@ spring:
   application:
     name: cloud-web-api
   datasource:
-    url: jdbc:h2:mem:testdb
-    driverClassName: org.h2.Driver
-    username: sa
-    password:
+    url: jdbc:postgresql://localhost:5432/cloud_db
+    driverClassName: org.postgresql.Driver
+    username: postgres
+    password: postgres
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate:
         format_sql: true
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
 
 server:
   port: 8080
-  servlet:
-    context-path: /api
 
 jwt:
   secret: your_secret_key_change_this_in_production_with_a_long_random_string_at_least_256_bits

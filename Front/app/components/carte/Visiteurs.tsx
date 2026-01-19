@@ -1,8 +1,17 @@
-import { MapContainer, TileLayer, LayersControl, Marker, Popup } from 'react-leaflet';
-import * as L from 'leaflet';
-import type { LatLngExpression } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import '../../carte.css';
+import { MapContainer, TileLayer, LayersControl, Marker, Popup, Tooltip } from "react-leaflet";
+import * as L from "leaflet";
+import type { LatLngExpression } from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "../../carte.css";
+import {
+  getSignalements,
+  getSignalementsStats,
+  getTypeSignalements,
+  type SignalementMapDto,
+  type SignalementsStats,
+  type TypeSignalement,
+} from "~/lib/api";
+import { useEffect, useMemo, useState } from "react";
 
 const { BaseLayer } = LayersControl;
 
@@ -50,29 +59,92 @@ const getIconForType = (type: PointType) => {
   });
 };
 
-const samplePoints = [
-  { id: 1, lat: -18.879, lng: 47.507, type: 'travaux', title: 'Travaux rue A', desc: 'Travaux de voirie' },
-  { id: 2, lat: -18.883, lng: 47.512, type: 'accident', title: 'Accident', desc: 'Accident mineur' },
-  { id: 3, lat: -18.875, lng: 47.499, type: 'nid-de-poule', title: 'Nid de poche', desc: 'Voirie dégradée' },
-  { id: 4, lat: -18.877, lng: 47.505, type: 'repare', title: 'Réparé', desc: 'Signalement réparé' },
-  { id: 5, lat: -18.881, lng: 47.510, type: 'abime', title: 'Abîmé', desc: 'Dommages importants' },
-  { id: 6, lat: -18.882, lng: 47.508, type: 'alerte', title: 'Alerte', desc: 'Alerte sécurité' },
-  { id: 7, lat: -18.880, lng: 47.503, type: 'zone-rouge', title: 'Zone rouge', desc: 'Accès interdit' },
-  { id: 8, lat: -18.876, lng: 47.506, type: 'eau', title: 'Fuite / eau', desc: 'Possible inondation / fuite' }
-];
+const typeMapping: Record<string, PointType> = {
+  "en construction": "travaux",
+  "accident": "accident",
+  "nid de poule": "nid-de-poule",
+  "réparé": "repare",
+  "repare": "repare",
+  "abîmé": "abime",
+  "abime": "abime",
+  "alerte": "alerte",
+  "zone rouge": "zone-rouge",
+  "fuite / eau": "eau",
+  "eft": "eft",
+};
+
+const normalizeLabel = (label?: string | null) =>
+  (label ?? "").trim().toLowerCase();
+
+const resolveType = (label?: string | null): PointType => {
+  const key = normalizeLabel(label);
+  return typeMapping[key] ?? "travaux";
+};
 
 export default function Visiteurs() {
-  const pointTypes: Array<{ type: PointType; label: string }> = [
-    { type: 'travaux', label: 'En construction' },
-    { type: 'accident', label: 'Accident' },
-    { type: 'nid-de-poule', label: 'Nid de poule' },
-    { type: 'repare', label: 'Réparé' },
-    { type: 'abime', label: 'Abîmé' },
-    { type: 'alerte', label: 'Alerte' },
-    { type: 'zone-rouge', label: 'Zone rouge' },
-    { type: 'eau', label: 'Fuite / eau' },
-    { type: 'eft', label: 'EFT' },
-  ];
+  const [signalements, setSignalements] = useState<SignalementMapDto[]>([]);
+  const [typeSignalements, setTypeSignalements] = useState<TypeSignalement[]>([]);
+  const [stats, setStats] = useState<SignalementsStats | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedType, setSelectedType] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    const filters = {
+      status: selectedStatus || undefined,
+      type: selectedType || undefined,
+    };
+    Promise.all([
+      getSignalements(filters),
+      getTypeSignalements(),
+      getSignalementsStats(filters),
+    ]).then(([signalementsData, typesData, statsData]) => {
+        if (!active) return;
+        setSignalements(signalementsData);
+        setTypeSignalements(typesData);
+        setStats(statsData);
+      })
+      .catch(() => {
+        if (!active) return;
+        setError("Impossible de charger les signalements.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedStatus, selectedType]);
+
+  const points = useMemo(
+    () =>
+      signalements.filter(
+        (item) =>
+          typeof item.latitude === "number" &&
+          typeof item.longitude === "number",
+      ),
+    [signalements],
+  );
+
+  const pointTypes: Array<{ type: PointType; label: string }> =
+    typeSignalements.map((item) => ({
+      type: resolveType(item.libelle),
+      label: item.libelle,
+    }));
+
+  const statusOptions = useMemo(() => {
+    const values = new Set<string>();
+    signalements.forEach((item) => {
+      if (item.statut) {
+        values.add(item.statut);
+      }
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [signalements]);
 
   return (
     <div className="flex h-screen w-full overflow-hidden gap-4 p-4">
@@ -92,18 +164,33 @@ export default function Visiteurs() {
             </BaseLayer>
           </LayersControl>
 
-          {samplePoints.map((p) => (
+          {points.map((p) => (
             <Marker
               key={p.id}
-              position={[p.lat, p.lng]}
-              icon={getIconForType(p.type as PointType)}
+              position={[p.latitude as number, p.longitude as number]}
+              icon={getIconForType(resolveType(p.typeSignalement))}
             >
+              <Tooltip direction="top" offset={[0, -10]} opacity={0.9} sticky>
+                <div className="text-xs">
+                  <div className="font-semibold">{p.typeSignalement ?? "Signalement"}</div>
+                  <div>Status: {p.statut ?? "-"}</div>
+                  <div>Surface: {p.surface ?? "-"} m²</div>
+                  <div>Budget: {p.budget ?? "-"}</div>
+                  <div>Entreprise: {p.entreprise ?? "-"}</div>
+                </div>
+              </Tooltip>
               <Popup>
-                <strong>{p.title}</strong>
+                <strong>{p.typeSignalement ?? "Signalement"}</strong>
                 <br />
-                {p.desc}
+                Date: {p.date ?? "-"}
                 <br />
-                Type: {p.type}
+                Statut: {p.statut ?? "-"}
+                <br />
+                Surface: {p.surface ?? "-"} m²
+                <br />
+                Budget: {p.budget ?? "-"}
+                <br />
+                Entreprise: {p.entreprise ?? "-"}
               </Popup>
             </Marker>
           ))}
@@ -113,6 +200,53 @@ export default function Visiteurs() {
       {/* Légende - 25% */}
       <div className="w-1/4 bg-white rounded-lg shadow-lg p-4 overflow-y-auto">
         <h3 className="font-semibold text-sm mb-4 text-gray-800">Légende</h3>
+        {isLoading ? (
+          <p className="text-xs text-gray-500">Chargement...</p>
+        ) : null}
+        {error ? (
+          <p className="text-xs text-red-600">{error}</p>
+        ) : null}
+        <div className="mb-4 space-y-2">
+          <div>
+            <label className="text-xs font-medium text-gray-700">Statut</label>
+            <select
+              className="mt-1 w-full rounded-md border border-gray-200 bg-white p-2 text-xs"
+              value={selectedStatus}
+              onChange={(event) => setSelectedStatus(event.target.value)}
+            >
+              <option value="">Tous</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700">Type</label>
+            <select
+              className="mt-1 w-full rounded-md border border-gray-200 bg-white p-2 text-xs"
+              value={selectedType}
+              onChange={(event) => setSelectedType(event.target.value)}
+            >
+              <option value="">Tous</option>
+              {typeSignalements.map((type) => (
+                <option key={type.id} value={type.libelle}>
+                  {type.libelle}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="mb-6 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <p className="text-xs font-semibold text-gray-700 mb-2">Récapitulatif</p>
+          <div className="space-y-1 text-xs text-gray-700">
+            <div>Nombre de points: {stats?.totalPoints ?? 0}</div>
+            <div>Surface totale: {stats?.totalSurface ?? 0} m²</div>
+            <div>Budget total: {stats?.totalBudget ?? 0}</div>
+            <div>Avancement: {stats ? stats.advancementPercent.toFixed(1) : 0}%</div>
+          </div>
+        </div>
         <div className="space-y-3">
           {pointTypes.map((item) => (
             <div key={item.type} className="flex items-center gap-2">

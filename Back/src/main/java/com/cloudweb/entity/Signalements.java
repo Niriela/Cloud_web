@@ -31,6 +31,10 @@ public class Signalements {
     @JoinColumn(name = "point_id")
     private Point point;
 
+    @ManyToOne
+    @JoinColumn(name = "type_signalement_id")
+    private TypeSignalement typeSignalement;
+
     private LocalDateTime date;
     private Double surface;
     private Double budget;
