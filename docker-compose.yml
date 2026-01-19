@@ -1,0 +1,59 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cloud-web-postgres
+    env_file:
+      - .env  # <-- Ajouter cette ligne
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"  # <-- Utiliser la variable
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d  # Optionnel: scripts d'init
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cloudweb-network
+
+  backend:
+    build: ./Back
+    container_name: cloud-web-api
+    env_file:
+      - .env  # <-- Charger toutes les variables
+    ports:
+      - "${SERVER_PORT}:8080"
+    environment:
+      # Variables spécifiques qui écrasent celles du .env si nécessaire
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      DB_HOST: postgres  # Nom du service, pas localhost
+      DB_PORT: 5432  # Port interne du conteneur PostgreSQL
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SCHEMA: ${DB_SCHEMA}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION_MS}
+      FIREBASE_ENABLED: ${FIREBASE_ENABLED}
+      # Ajouter d'autres variables si nécessaire
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cloudweb-network
+
+networks:
+  cloudweb-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
