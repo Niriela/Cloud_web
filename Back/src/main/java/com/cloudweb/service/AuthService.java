@@ -52,7 +52,6 @@ public class AuthService {
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .firstName(registerRequest.getFirstName())
                 .lastName(registerRequest.getLastName())
-                .enabled(true)
                 .build();
 
         userRepository.save(user);
