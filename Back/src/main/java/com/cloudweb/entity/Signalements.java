@@ -6,6 +6,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -39,6 +41,8 @@ public class Signalements {
     private Double surface;
     private Double budget;
 
+    private LocalDateTime updatedAt;
+
     @ManyToOne
     @JoinColumn(name = "statuts_id")
     private Statuts statuts;
@@ -46,4 +50,16 @@ public class Signalements {
     @ManyToOne
     @JoinColumn(name = "entreprise_id")
     private Entreprise entreprise;
+
+    @PrePersist
+    protected void onCreate() {
+        if (updatedAt == null) {
+            updatedAt = LocalDateTime.now();
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

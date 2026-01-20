@@ -33,7 +33,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
@@ -62,7 +61,8 @@ public class FirebaseSyncService {
                     .document(String.valueOf(statutsUser.getId()));
             batch.set(ref, Map.of(
                     "id", statutsUser.getId(),
-                    "libelle", statutsUser.getLibelle()
+                    "libelle", statutsUser.getLibelle(),
+                    "updated_at", formatDate(statutsUser.getUpdatedAt())
             ));
         }
 
@@ -71,7 +71,8 @@ public class FirebaseSyncService {
                     .document(String.valueOf(userType.getId()));
             batch.set(ref, Map.of(
                     "id", userType.getId(),
-                    "libelle", userType.getLibelle()
+                    "libelle", userType.getLibelle(),
+                    "updated_at", formatDate(userType.getUpdatedAt())
             ));
         }
 
@@ -81,7 +82,8 @@ public class FirebaseSyncService {
             batch.set(ref, Map.of(
                     "id", regle.getId(),
                     "libelle", regle.getLibelle(),
-                    "valeur", regle.getValeur()
+                    "valeur", regle.getValeur(),
+                    "updated_at", formatDate(regle.getUpdatedAt())
             ));
         }
 
@@ -90,7 +92,8 @@ public class FirebaseSyncService {
                     .document(String.valueOf(type.getId()));
             batch.set(ref, Map.of(
                     "id", type.getId(),
-                    "libelle", type.getLibelle()
+                    "libelle", type.getLibelle(),
+                    "updated_at", formatDate(type.getUpdatedAt())
             ));
         }
 
@@ -99,7 +102,8 @@ public class FirebaseSyncService {
                     .document(String.valueOf(statut.getId()));
             batch.set(ref, Map.of(
                     "id", statut.getId(),
-                    "libelle", statut.getLibelle()
+                    "libelle", statut.getLibelle(),
+                    "updated_at", formatDate(statut.getUpdatedAt())
             ));
         }
 
@@ -111,7 +115,8 @@ public class FirebaseSyncService {
                     "name", entreprise.getName(),
                     "address", entreprise.getAddress(),
                     "phone", entreprise.getPhone(),
-                    "active", entreprise.getActive()
+                    "active", entreprise.getActive(),
+                    "updated_at", formatDate(entreprise.getUpdatedAt())
             ));
         }
 
@@ -121,7 +126,8 @@ public class FirebaseSyncService {
             batch.set(ref, Map.of(
                     "id", point.getId(),
                     "latitude", point.getLatitude(),
-                    "longitude", point.getLongitude()
+                    "longitude", point.getLongitude(),
+                    "updated_at", formatDate(point.getUpdatedAt())
             ));
         }
 
@@ -140,6 +146,7 @@ public class FirebaseSyncService {
             data.put("statuts_id", signalement.getStatuts() != null ? signalement.getStatuts().getId() : null);
             data.put("entreprise_id",
                     signalement.getEntreprise() != null ? signalement.getEntreprise().getId() : null);
+            data.put("updated_at", formatDate(signalement.getUpdatedAt()));
             batch.set(ref, data);
         }
 
@@ -158,6 +165,7 @@ public class FirebaseSyncService {
                     user.getStatutsUser() != null ? user.getStatutsUser().getId() : null);
             data.put("user_type_id",
                     user.getUserType() != null ? user.getUserType().getId() : null);
+            data.put("updated_at", formatDate(user.getUpdatedAt()));
             batch.set(ref, data);
         }
 
@@ -171,6 +179,7 @@ public class FirebaseSyncService {
             data.put("statuts_id",
                     historique.getStatuts() != null ? historique.getStatuts().getId() : null);
             data.put("date", historique.getDate() != null ? historique.getDate().toString() : null);
+            data.put("updated_at", formatDate(historique.getUpdatedAt()));
             batch.set(ref, data);
         }
 
@@ -183,6 +192,7 @@ public class FirebaseSyncService {
             data.put("statuts_user_id",
                     historique.getStatutsUser() != null ? historique.getStatutsUser().getId() : null);
             data.put("date", historique.getDate() != null ? historique.getDate().toString() : null);
+            data.put("updated_at", formatDate(historique.getUpdatedAt()));
             batch.set(ref, data);
         }
 
@@ -215,8 +225,8 @@ public class FirebaseSyncService {
 
     @Async
     public void refreshAsync() {
-        pushAllToFirebase();
         pullAllFromFirebase();
+        pushAllToFirebase();
     }
 
     private void syncStatutsUser() throws ExecutionException, InterruptedException {
@@ -226,9 +236,15 @@ public class FirebaseSyncService {
             if (id == null) {
                 id = Long.parseLong(doc.getId());
             }
+            StatutsUser existing = statutsUserRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
+            }
             StatutsUser statutsUser = new StatutsUser();
             statutsUser.setId(id);
             statutsUser.setLibelle(doc.getString("libelle"));
+            statutsUser.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             statutsUserRepository.save(statutsUser);
         }
     }
@@ -240,9 +256,15 @@ public class FirebaseSyncService {
             if (id == null) {
                 id = Long.parseLong(doc.getId());
             }
+            UserType existing = userTypeRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
+            }
             UserType userType = new UserType();
             userType.setId(id);
             userType.setLibelle(doc.getString("libelle"));
+            userType.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             userTypeRepository.save(userType);
         }
     }
@@ -254,10 +276,16 @@ public class FirebaseSyncService {
             if (id == null) {
                 id = Long.parseLong(doc.getId());
             }
+            ReglesGestion existing = reglesGestionRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
+            }
             ReglesGestion regle = new ReglesGestion();
             regle.setId(id);
             regle.setLibelle(doc.getString("libelle"));
             regle.setValeur(doc.getString("valeur"));
+            regle.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             reglesGestionRepository.save(regle);
         }
     }
@@ -269,9 +297,15 @@ public class FirebaseSyncService {
             if (id == null) {
                 id = Long.parseLong(doc.getId());
             }
+            TypeSignalement existing = typeSignalementRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
+            }
             TypeSignalement type = new TypeSignalement();
             type.setId(id);
             type.setLibelle(doc.getString("libelle"));
+            type.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             typeSignalementRepository.save(type);
         }
     }
@@ -283,9 +317,15 @@ public class FirebaseSyncService {
             if (id == null) {
                 id = Long.parseLong(doc.getId());
             }
+            Statuts existing = statutsRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
+            }
             Statuts statut = new Statuts();
             statut.setId(id);
             statut.setLibelle(doc.getString("libelle"));
+            statut.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             statutsRepository.save(statut);
         }
     }
@@ -297,6 +337,11 @@ public class FirebaseSyncService {
             if (id == null) {
                 id = Long.parseLong(doc.getId());
             }
+            Entreprise existing = entrepriseRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
+            }
             Entreprise entreprise = new Entreprise();
             entreprise.setId(id);
             entreprise.setName(doc.getString("name"));
@@ -304,6 +349,7 @@ public class FirebaseSyncService {
             entreprise.setPhone(doc.getString("phone"));
             Boolean active = doc.getBoolean("active");
             entreprise.setActive(active);
+            entreprise.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             entrepriseRepository.save(entreprise);
         }
     }
@@ -315,10 +361,16 @@ public class FirebaseSyncService {
             if (id == null) {
                 id = Long.parseLong(doc.getId());
             }
+            Point existing = pointRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
+            }
             Point point = new Point();
             point.setId(id);
             point.setLatitude(getDouble(doc, "latitude"));
             point.setLongitude(getDouble(doc, "longitude"));
+            point.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             pointRepository.save(point);
         }
     }
@@ -329,6 +381,11 @@ public class FirebaseSyncService {
             Long id = getLong(doc, "id");
             if (id == null) {
                 id = Long.parseLong(doc.getId());
+            }
+            User existing = userRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
             }
             User user = new User();
             user.setId(id);
@@ -356,6 +413,7 @@ public class FirebaseSyncService {
 
             Long failedAttempts = getLong(doc, "failed_login_attempts");
             user.setFailedLoginAttempts(failedAttempts != null ? failedAttempts.intValue() : 0);
+            user.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
 
             userRepository.save(user);
         }
@@ -367,6 +425,11 @@ public class FirebaseSyncService {
             Long id = getLong(doc, "id");
             if (id == null) {
                 id = Long.parseLong(doc.getId());
+            }
+            Signalements existing = signalementsRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
             }
             Signalements signalement = new Signalements();
             signalement.setId(id);
@@ -408,6 +471,7 @@ public class FirebaseSyncService {
                 signalement.setEntreprise(entreprise);
             }
 
+            signalement.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             signalementsRepository.save(signalement);
         }
     }
@@ -418,6 +482,11 @@ public class FirebaseSyncService {
             Long id = getLong(doc, "id");
             if (id == null) {
                 id = Long.parseLong(doc.getId());
+            }
+            HistoriqueSignalements existing = historiqueSignalementsRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
             }
             HistoriqueSignalements historique = new HistoriqueSignalements();
             historique.setId(id);
@@ -439,6 +508,7 @@ public class FirebaseSyncService {
                 historique.setDate(LocalDateTime.parse(dateValue));
             }
 
+            historique.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             historiqueSignalementsRepository.save(historique);
         }
     }
@@ -449,6 +519,11 @@ public class FirebaseSyncService {
             Long id = getLong(doc, "id");
             if (id == null) {
                 id = Long.parseLong(doc.getId());
+            }
+            HistoriqueUsers existing = historiqueUsersRepository.findById(id).orElse(null);
+            LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
+            if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                continue;
             }
             HistoriqueUsers historique = new HistoriqueUsers();
             historique.setId(id);
@@ -470,6 +545,7 @@ public class FirebaseSyncService {
                 historique.setDate(LocalDateTime.parse(dateValue));
             }
 
+            historique.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             historiqueUsersRepository.save(historique);
         }
     }
@@ -502,5 +578,31 @@ public class FirebaseSyncService {
             }
         }
         return null;
+    }
+
+    private LocalDateTime getDate(DocumentSnapshot doc, String field) {
+        String value = doc.getString(field);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String formatDate(LocalDateTime value) {
+        return value != null ? value.toString() : null;
+    }
+
+    private boolean shouldOverwrite(LocalDateTime localUpdatedAt, LocalDateTime remoteUpdatedAt) {
+        if (remoteUpdatedAt == null) {
+            return false;
+        }
+        if (localUpdatedAt == null) {
+            return true;
+        }
+        return remoteUpdatedAt.isAfter(localUpdatedAt);
     }
 }

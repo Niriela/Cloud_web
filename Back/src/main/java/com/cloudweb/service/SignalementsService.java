@@ -14,6 +14,7 @@ import com.cloudweb.repository.StatutsRepository;
 import com.cloudweb.repository.TypeSignalementRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import com.cloudweb.service.FirebaseSyncService;
 
 import java.util.List;
 import java.util.Locale;
@@ -26,6 +27,7 @@ public class SignalementsService {
     private final StatutsRepository statutsRepository;
     private final EntrepriseRepository entrepriseRepository;
     private final TypeSignalementRepository typeSignalementRepository;
+    private final FirebaseSyncService firebaseSyncService;
 
     public List<SignalementMapDto> getAllForMap(String statusFilter, String typeFilter) {
         return signalementsRepository.findAll()
@@ -94,6 +96,7 @@ public class SignalementsService {
         }
 
         Signalements saved = signalementsRepository.save(signalement);
+        firebaseSyncService.refreshAsync();
         return toMapDto(saved);
     }
 

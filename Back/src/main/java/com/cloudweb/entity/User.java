@@ -35,6 +35,9 @@ public class User {
     private LocalDateTime date;
 
     @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
+    @Column(nullable = false)
     @Builder.Default
     private Integer failedLoginAttempts = 0;
 
@@ -51,5 +54,13 @@ public class User {
         if (date == null) {
             date = LocalDateTime.now();
         }
+        if (updatedAt == null) {
+            updatedAt = LocalDateTime.now();
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 }

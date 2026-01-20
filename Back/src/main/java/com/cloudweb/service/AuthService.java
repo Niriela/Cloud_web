@@ -12,6 +12,7 @@ import com.cloudweb.repository.StatutsUserRepository;
 import com.cloudweb.repository.UserTypeRepository;
 import com.cloudweb.repository.UserRepository;
 import com.cloudweb.security.JwtTokenProvider;
+import com.cloudweb.service.FirebaseSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -28,6 +29,7 @@ public class AuthService {
     private final ReglesGestionRepository reglesGestionRepository;
     private final StatutsUserRepository statutsUserRepository;
     private final UserTypeRepository userTypeRepository;
+    private final FirebaseSyncService firebaseSyncService;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
@@ -85,7 +87,9 @@ public class AuthService {
                 .userType(utilisateur)
                 .build();
 
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        firebaseSyncService.refreshAsync();
+        return saved;
     }
 
     private boolean isBlocked(User user) {
@@ -110,12 +114,14 @@ public class AuthService {
         }
 
         userRepository.save(user);
+        firebaseSyncService.refreshAsync();
     }
 
     private void resetFailedAttempts(User user) {
         if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() > 0) {
             user.setFailedLoginAttempts(0);
             userRepository.save(user);
+            firebaseSyncService.refreshAsync();
         }
     }
 
@@ -144,5 +150,6 @@ public class AuthService {
         }
         user.setFailedLoginAttempts(0);
         userRepository.save(user);
+        firebaseSyncService.refreshAsync();
     }
 }
