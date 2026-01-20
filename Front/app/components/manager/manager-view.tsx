@@ -12,13 +12,11 @@ import {
 } from "~/lib/api";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
 
 type Draft = {
   surface: string;
@@ -52,7 +50,6 @@ export default function ManagerView() {
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -135,24 +132,8 @@ export default function ManagerView() {
         <CardDescription>
           Gerez les informations des signalements et les statuts.
         </CardDescription>
-        <CardAction>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              setSyncMessage(
-                "Synchronisation Firebase a brancher (backend manquant).",
-              )
-            }
-          >
-            Synchroniser
-          </Button>
-        </CardAction>
       </CardHeader>
       <CardContent>
-        {syncMessage ? (
-          <p className="mb-3 text-xs text-amber-700">{syncMessage}</p>
-        ) : null}
         {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Chargement...</p>

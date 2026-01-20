@@ -3,6 +3,7 @@
 import * as React from "react"
 import { GalleryVerticalEnd, Map } from "lucide-react"
 
+import { Button } from "~/components/ui/button"
 import { NavMain } from "~/components/nav-main"
 import { NavProjects } from "~/components/nav-projects"
 import { NavUser } from "~/components/nav-user"
@@ -14,6 +15,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "~/components/ui/sidebar"
+import { syncFirebase } from "~/lib/api"
 
 // This is sample data.
 const data = {
@@ -47,15 +49,15 @@ const data = {
       isActive: true,
       items: [
         {
-          title: "Visiteurs",
+          title: "Accueil",
           url: "/Visiteurs",
         },
         {
-          title: "Manager",
+          title: "Gerer les signalements",
           url: "/manager",
         },
         {
-          title: "Admin",
+          title: "Gerer les utilisateurs",
           url: "/admin",
         },
       ],
@@ -64,6 +66,22 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [syncMessage, setSyncMessage] = React.useState<string | null>(null)
+  const [isSyncing, setIsSyncing] = React.useState(false)
+
+  const handleSync = async () => {
+    setIsSyncing(true)
+    setSyncMessage(null)
+    try {
+      await syncFirebase()
+      setSyncMessage("Synchronisation terminee.")
+    } catch {
+      setSyncMessage("Echec de la synchronisation.")
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -73,6 +91,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={data.navMain} />
       </SidebarContent>
       <SidebarFooter>
+        <div className="p-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={isSyncing}
+            onClick={handleSync}
+          >
+            {isSyncing ? "Synchronisation..." : "Synchroniser"}
+          </Button>
+          {syncMessage ? (
+            <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p>
+          ) : null}
+        </div>
         <NavUser user={data.user} />
       </SidebarFooter>
       <SidebarRail />

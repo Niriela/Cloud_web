@@ -19,6 +19,7 @@ public class UserService {
     public List<UserAdminDto> getAllUsers() {
         return userRepository.findAll()
                 .stream()
+                .filter(this::isUtilisateur)
                 .map(this::toAdminDto)
                 .toList();
     }
@@ -37,5 +38,13 @@ public class UserService {
                 .statutsUser(statutsUser != null ? statutsUser.getLibelle() : null)
                 .userType(userType != null ? userType.getLibelle() : null)
                 .build();
+    }
+
+    private boolean isUtilisateur(User user) {
+        UserType userType = user.getUserType();
+        if (userType == null || userType.getLibelle() == null) {
+            return false;
+        }
+        return "utilisateur".equalsIgnoreCase(userType.getLibelle());
     }
 }

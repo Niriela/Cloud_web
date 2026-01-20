@@ -184,3 +184,9 @@ export function resetUserBlock(userId: number) {
     method: "POST",
   });
 }
+
+export function syncFirebase() {
+  return apiRequest<void>("/api/sync/firebase/refresh", {
+    method: "POST",
+  });
+}
