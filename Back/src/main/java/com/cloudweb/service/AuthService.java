@@ -6,8 +6,10 @@ import com.cloudweb.dto.RegisterRequest;
 import com.cloudweb.entity.ReglesGestion;
 import com.cloudweb.entity.StatutsUser;
 import com.cloudweb.entity.User;
+import com.cloudweb.entity.UserType;
 import com.cloudweb.repository.ReglesGestionRepository;
 import com.cloudweb.repository.StatutsUserRepository;
+import com.cloudweb.repository.UserTypeRepository;
 import com.cloudweb.repository.UserRepository;
 import com.cloudweb.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final ReglesGestionRepository reglesGestionRepository;
     private final StatutsUserRepository statutsUserRepository;
+    private final UserTypeRepository userTypeRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
@@ -62,30 +65,27 @@ public class AuthService {
     }
 
     public AuthResponse register(RegisterRequest registerRequest) {
+        throw new RuntimeException("Registration is disabled");
+    }
+
+    public User createUserByManager(RegisterRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
             throw new RuntimeException("Email already exists");
         }
 
         StatutsUser actif = statutsUserRepository.findByLibelle("Actif").orElse(null);
+        UserType utilisateur = userTypeRepository.findByLibelle("Utilisateur").orElse(null);
+
         User user = User.builder()
                 .email(registerRequest.getEmail())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .firstName(registerRequest.getFirstName())
                 .lastName(registerRequest.getLastName())
                 .statutsUser(actif)
+                .userType(utilisateur)
                 .build();
 
-        userRepository.save(user);
-
-        String token = jwtTokenProvider.generateTokenFromEmail(user.getEmail());
-
-        return AuthResponse.builder()
-                .token(token)
-                .id(user.getId())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .build();
+        return userRepository.save(user);
     }
 
     private boolean isBlocked(User user) {

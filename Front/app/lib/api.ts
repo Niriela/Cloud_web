@@ -124,6 +124,13 @@ export function register(payload: RegisterPayload) {
   });
 }
 
+export function createManagerUser(payload: RegisterPayload) {
+  return apiRequest<UserAdmin>("/api/manager/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getSignalements(filters?: { status?: string; type?: string }) {
   const params = new URLSearchParams();
   if (filters?.status) params.set("status", filters.status);

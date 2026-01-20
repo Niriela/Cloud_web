@@ -2,6 +2,9 @@ package com.cloudweb.controller;
 
 import com.cloudweb.service.FirebaseSyncService;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Map;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,20 +20,20 @@ public class FirebaseSyncController {
     private final FirebaseSyncService firebaseSyncService;
 
     @PostMapping("/push")
-    public ResponseEntity<Void> push() {
+    public ResponseEntity<Map<String, String>> push() {
         firebaseSyncService.pushAllToFirebase();
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("status", "ok", "action", "push"));
     }
 
     @PostMapping("/pull")
-    public ResponseEntity<Void> pull() {
+    public ResponseEntity<Map<String, String>> pull() {
         firebaseSyncService.pullAllFromFirebase();
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("status", "ok", "action", "pull"));
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<Void> refresh() {
+    public ResponseEntity<Map<String, String>> refresh() {
         firebaseSyncService.refreshAsync();
-        return ResponseEntity.accepted().build();
+        return ResponseEntity.accepted().body(Map.of("status", "accepted", "action", "refresh"));
     }
 }

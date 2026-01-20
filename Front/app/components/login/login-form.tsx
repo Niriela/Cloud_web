@@ -129,7 +129,7 @@ export function LoginForm({
                 </Button>
               </Field>
               <FieldDescription className="text-center">
-                Don&apos;t have an account? <a href="/register">Sign up</a>
+                Contactez le manager pour creer un compte.
               </FieldDescription>
             </FieldGroup>
           </form>
