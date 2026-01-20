@@ -1,22 +1,43 @@
-FROM node:20-alpine AS development-dependencies-env
-COPY . /app
+# Front/Dockerfile (version finale corrigée)
+FROM node:20-alpine AS builder
+
 WORKDIR /app
+
+# Copier package.json d'abord (optimisation cache)
+COPY package*.json ./
+
+# Installer dépendances
 RUN npm ci
 
-FROM node:20-alpine AS production-dependencies-env
-COPY ./package.json package-lock.json /app/
-WORKDIR /app
-RUN npm ci --omit=dev
+# Copier le reste
+COPY . .
 
-FROM node:20-alpine AS build-env
-COPY . /app/
-COPY --from=development-dependencies-env /app/node_modules /app/node_modules
-WORKDIR /app
+# Builder
 RUN npm run build
 
-FROM node:20-alpine
-COPY ./package.json package-lock.json /app/
-COPY --from=production-dependencies-env /app/node_modules /app/node_modules
-COPY --from=build-env /app/build /app/build
-WORKDIR /app
-CMD ["npm", "run", "start"]
+# Vérifier
+RUN echo "Build réussi. Fichiers:" && \
+    ls -la /app/build/client/
+
+# Étape production
+FROM nginx:alpine
+
+# SUPPRIMER COMPLÈTEMENT les fichiers par défaut
+RUN rm -rf /usr/share/nginx/html/* && \
+    rm -f /etc/nginx/conf.d/default.conf
+
+# Copier VOTRE configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Copier VOS fichiers
+COPY --from=builder /app/build/client/. /usr/share/nginx/html/
+
+# Vérification
+RUN echo "Fichiers après copie:" && \
+    ls -la /usr/share/nginx/html/ && \
+    echo "Pas de 50x.html:" $(test ! -f /usr/share/nginx/html/50x.html && echo "✅" || echo "❌")
+
+EXPOSE 80
+
+# Commande correcte
+CMD ["nginx", "-g", "daemon off;"]
