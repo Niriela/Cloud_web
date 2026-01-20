@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  createManagerUser,
   getEntreprises,
   getSignalements,
   getStatuts,
@@ -52,14 +51,6 @@ export default function ManagerView() {
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [createMessage, setCreateMessage] = useState<string | null>(null);
-  const [newUser, setNewUser] = useState({
-    email: "",
-    password: "",
-    firstName: "",
-    lastName: "",
-  });
 
   useEffect(() => {
     let active = true;
@@ -144,77 +135,6 @@ export default function ManagerView() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="mb-6 rounded-md border border-gray-200 bg-gray-50 p-4">
-          <p className="mb-3 text-sm font-semibold text-gray-700">
-            Creer un compte utilisateur
-          </p>
-          {createError ? (
-            <p className="mb-2 text-xs text-red-600">{createError}</p>
-          ) : null}
-          {createMessage ? (
-            <p className="mb-2 text-xs text-green-700">{createMessage}</p>
-          ) : null}
-          <div className="grid gap-3 md:grid-cols-2">
-            <input
-              className="w-full rounded-md border border-gray-200 px-3 py-2 text-xs"
-              placeholder="Prenom"
-              value={newUser.firstName}
-              onChange={(event) =>
-                setNewUser((prev) => ({ ...prev, firstName: event.target.value }))
-              }
-            />
-            <input
-              className="w-full rounded-md border border-gray-200 px-3 py-2 text-xs"
-              placeholder="Nom"
-              value={newUser.lastName}
-              onChange={(event) =>
-                setNewUser((prev) => ({ ...prev, lastName: event.target.value }))
-              }
-            />
-            <input
-              className="w-full rounded-md border border-gray-200 px-3 py-2 text-xs"
-              placeholder="Email"
-              type="email"
-              value={newUser.email}
-              onChange={(event) =>
-                setNewUser((prev) => ({ ...prev, email: event.target.value }))
-              }
-            />
-            <input
-              className="w-full rounded-md border border-gray-200 px-3 py-2 text-xs"
-              placeholder="Mot de passe"
-              type="password"
-              value={newUser.password}
-              onChange={(event) =>
-                setNewUser((prev) => ({ ...prev, password: event.target.value }))
-              }
-            />
-          </div>
-          <div className="mt-3 flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              onClick={async () => {
-                setCreateError(null);
-                setCreateMessage(null);
-                try {
-                  await createManagerUser(newUser);
-                  setCreateMessage("Compte utilisateur cree.");
-                  setNewUser({
-                    email: "",
-                    password: "",
-                    firstName: "",
-                    lastName: "",
-                  });
-                } catch {
-                  setCreateError("Impossible de creer le compte.");
-                }
-              }}
-            >
-              Creer
-            </Button>
-          </div>
-        </div>
         {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Chargement...</p>

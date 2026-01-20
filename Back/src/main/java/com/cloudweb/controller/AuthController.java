@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import java.util.Map;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -72,15 +73,15 @@ public class AuthController {
             description = "Reinitialise le statut et les tentatives de connexion."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Deblocage effectue"),
+            @ApiResponse(responseCode = "200", description = "Deblocage effectue"),
             @ApiResponse(responseCode = "404", description = "Utilisateur introuvable"),
             @ApiResponse(responseCode = "500", description = "Erreur interne")
     })
-    public ResponseEntity<Void> resetBlock(
+    public ResponseEntity<Map<String, String>> resetBlock(
             @Parameter(description = "Identifiant de l'utilisateur a debloquer", example = "1")
             @RequestParam Long userId
     ) {
         authService.resetUserBlock(userId);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("status", "ok", "action", "reset-block"));
     }
 }
