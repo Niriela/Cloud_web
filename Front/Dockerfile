@@ -1,43 +1,40 @@
-# Front/Dockerfile (version finale corrigée)
+# Front/Dockerfile - Version simplifiée et efficace
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copier package.json d'abord (optimisation cache)
-COPY package*.json ./
+# 1. Copier package.json pour le cache
+COPY package.json package-lock.json ./
 
-# Installer dépendances
-RUN npm ci
+# 2. Installer toutes les dépendances (production + dev)
+RUN npm install --frozen-lockfile
 
-# Copier le reste
+# 3. Copier tout le code source
 COPY . .
 
-# Builder
-RUN npm run build
+# 4. Définir les variables d'environnement pour Vite
+ARG VITE_API_URL=http://backend:8080/api
+ARG VITE_APP_NAME=CloudWeb
+ARG VITE_APP_VERSION=1.0.0
 
-# Vérifier
-RUN echo "Build réussi. Fichiers:" && \
-    ls -la /app/build/client/
-
-# Étape production
-FROM nginx:alpine
-
-# SUPPRIMER COMPLÈTEMENT les fichiers par défaut
-RUN rm -rf /usr/share/nginx/html/* && \
-    rm -f /etc/nginx/conf.d/default.conf
-
-# Copier VOTRE configuration
-COPY nginx.conf /etc/nginx/nginx.conf
-
-# Copier VOS fichiers
-COPY --from=builder /app/build/client/. /usr/share/nginx/html/
+# 5. Builder avec ces variables
+RUN VITE_API_URL=${VITE_API_URL} \
+    VITE_APP_NAME=${VITE_APP_NAME} \
+    VITE_APP_VERSION=${VITE_APP_VERSION} \
+    npm run build
 
 # Vérification
-RUN echo "Fichiers après copie:" && \
-    ls -la /usr/share/nginx/html/ && \
-    echo "Pas de 50x.html:" $(test ! -f /usr/share/nginx/html/50x.html && echo "✅" || echo "❌")
+RUN ls -la /app/build/client/ && \
+    echo "Fichiers générés:" && \
+    find /app/build/client/ -name "*.js" | head -5
+
+# Production
+FROM nginx:alpine
+
+RUN rm -rf /usr/share/nginx/html/*
+
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/build/client/. /usr/share/nginx/html/
 
 EXPOSE 80
-
-# Commande correcte
 CMD ["nginx", "-g", "daemon off;"]
