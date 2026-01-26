@@ -35,7 +35,7 @@ public class AuthController {
             @ApiResponse(responseCode = "403", description = "Utilisateur bloque"),
             @ApiResponse(responseCode = "404", description = "Utilisateur introuvable")
     })
-    public ResponseEntity<AuthResponse> session(
+    public ResponseEntity<?> session(
             Authentication authentication,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
@@ -48,12 +48,29 @@ public class AuthController {
             token = authorization.substring(7);
         }
 
-        AuthResponse authResponse = authService.loginWithFirebase(
-                principal.getUid(),
-                principal.getEmail(),
-                token
-        );
-        return ResponseEntity.ok(authResponse);
+        try {
+            AuthResponse authResponse = authService.loginWithFirebase(
+                    principal.getUid(),
+                    principal.getEmail(),
+                    token
+            );
+            return ResponseEntity.ok(authResponse);
+        } catch (RuntimeException ex) {
+            String message = ex.getMessage() != null ? ex.getMessage() : "Access denied";
+            HttpStatus status = HttpStatus.BAD_REQUEST;
+            if ("User is blocked".equalsIgnoreCase(message)) {
+                status = HttpStatus.FORBIDDEN;
+            } else if ("Access denied".equalsIgnoreCase(message)) {
+                status = HttpStatus.FORBIDDEN;
+            } else if ("User not registered".equalsIgnoreCase(message)) {
+                status = HttpStatus.NOT_FOUND;
+            } else if ("Firebase identity mismatch".equalsIgnoreCase(message)) {
+                status = HttpStatus.FORBIDDEN;
+            } else if ("Missing Firebase uid".equalsIgnoreCase(message)) {
+                status = HttpStatus.BAD_REQUEST;
+            }
+            return ResponseEntity.status(status).body(Map.of("message", message));
+        }
     }
 
     @GetMapping("/health")

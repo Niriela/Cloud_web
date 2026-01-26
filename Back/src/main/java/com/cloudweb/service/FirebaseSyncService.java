@@ -426,7 +426,11 @@ public class FirebaseSyncService {
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
             Long id = getLong(doc, "id");
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                try {
+                    id = Long.parseLong(doc.getId());
+                } catch (NumberFormatException ex) {
+                    continue;
+                }
             }
             Signalements existing = signalementsRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");

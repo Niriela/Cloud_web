@@ -33,7 +33,8 @@ public class FirebaseSyncController {
 
     @PostMapping("/refresh")
     public ResponseEntity<Map<String, String>> refresh() {
-        firebaseSyncService.refreshAsync();
-        return ResponseEntity.accepted().body(Map.of("status", "accepted", "action", "refresh"));
+        firebaseSyncService.pullAllFromFirebase();
+        firebaseSyncService.pushAllToFirebase();
+        return ResponseEntity.ok(Map.of("status", "ok", "action", "refresh"));
     }
 }

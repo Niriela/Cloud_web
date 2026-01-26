@@ -28,7 +28,14 @@ async function apiRequest<T>(
         message = data.message;
       }
     } catch {
-      // Ignore parse errors and use default message.
+      try {
+        const text = await response.text();
+        if (text) {
+          message = text;
+        }
+      } catch {
+        // Ignore parse errors and use default message.
+      }
     }
 
     const error: ApiError = { message, status: response.status };

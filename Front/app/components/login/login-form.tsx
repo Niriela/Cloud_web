@@ -53,10 +53,14 @@ export function LoginForm({
       navigate("/Visiteurs")
     } catch (err) {
       clearAuthSession()
-      const message =
+      const rawMessage =
         err && typeof err === "object" && "message" in err
           ? String((err as { message?: string }).message)
           : "Login failed"
+      const message =
+        rawMessage === "Access denied"
+          ? "Connexion reservee au Manager."
+          : rawMessage
       setError(message)
     } finally {
       setIsLoading(false)

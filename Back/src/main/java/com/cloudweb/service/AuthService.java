@@ -32,6 +32,9 @@ public class AuthService {
         if (isBlocked(user)) {
             throw new RuntimeException("User is blocked");
         }
+        if (!isManager(user)) {
+            throw new RuntimeException("Access denied");
+        }
 
         return AuthResponse.builder()
                 .token(idToken)
@@ -114,6 +117,13 @@ public class AuthService {
         }
         String status = user.getStatutsUser().getLibelle();
         return "Bloque".equalsIgnoreCase(status) || "Banni".equalsIgnoreCase(status);
+    }
+
+    private boolean isManager(User user) {
+        if (user.getUserType() == null || user.getUserType().getLibelle() == null) {
+            return false;
+        }
+        return "manager".equalsIgnoreCase(user.getUserType().getLibelle());
     }
 
     private void registerFailedAttempt(User user) {
