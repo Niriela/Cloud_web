@@ -61,3 +61,46 @@ INSERT INTO users (
   1,
   3
 );
+
+WITH canonical AS (
+  SELECT
+    id,
+    ROUND(latitude::numeric, 6) AS lat,
+    ROUND(longitude::numeric, 6) AS lon,
+    MIN(id) OVER (
+      PARTITION BY ROUND(latitude::numeric, 6), ROUND(longitude::numeric, 6)
+    ) AS keep_id
+  FROM point
+  WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+)
+UPDATE signalements s
+SET point_id = c.keep_id
+FROM canonical c
+WHERE s.point_id = c.id AND c.id <> c.keep_id;
+
+WITH canonical AS (
+  SELECT
+    id,
+    MIN(id) OVER (
+      PARTITION BY ROUND(latitude::numeric, 6), ROUND(longitude::numeric, 6)
+    ) AS keep_id
+  FROM point
+  WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+)
+DELETE FROM point p
+USING canonical c
+WHERE p.id = c.id AND c.id <> c.keep_id;
+
+WITH canonical AS (
+  SELECT
+    id,
+    MIN(id) OVER (
+      PARTITION BY
+        point_id, type_signalement_id, user_id, date,
+        surface, budget, entreprise_id, statuts_id
+    ) AS keep_id
+  FROM signalements
+)
+DELETE FROM signalements s
+USING canonical c
+WHERE s.id = c.id AND c.id <> c.keep_id;

@@ -11,6 +11,11 @@ import {
   type SignalementsStats,
   type TypeSignalement,
 } from "~/lib/api";
+import {
+  getFirestoreSignalements,
+  getFirestoreSignalementsStats,
+  getFirestoreTypeSignalements,
+} from "~/lib/firestore-data";
 import { useEffect, useMemo, useState } from "react";
 
 const { BaseLayer } = LayersControl;
@@ -97,11 +102,28 @@ export default function Visiteurs() {
       status: selectedStatus || undefined,
       type: selectedType || undefined,
     };
-    Promise.all([
-      getSignalements(filters),
-      getTypeSignalements(),
-      getSignalementsStats(filters),
-    ]).then(([signalementsData, typesData, statsData]) => {
+    const load = async () => {
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        try {
+          const [signalementsData, typesData, statsData] = await Promise.all([
+            getFirestoreSignalements(filters),
+            getFirestoreTypeSignalements(),
+            getFirestoreSignalementsStats(filters),
+          ])
+          return { signalementsData, typesData, statsData }
+        } catch {
+          // fall back to API if Firestore fails
+        }
+      }
+      const [signalementsData, typesData, statsData] = await Promise.all([
+        getSignalements(filters),
+        getTypeSignalements(),
+        getSignalementsStats(filters),
+      ])
+      return { signalementsData, typesData, statsData }
+    }
+
+    load().then(({ signalementsData, typesData, statsData }) => {
         if (!active) return;
         setSignalements(signalementsData);
         setTypeSignalements(typesData);

@@ -2,6 +2,7 @@ package com.cloudweb.controller;
 
 import com.cloudweb.service.FirebaseSyncService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/sync/firebase")
 @RequiredArgsConstructor
 @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
+@Slf4j
 public class FirebaseSyncController {
 
     private final FirebaseSyncService firebaseSyncService;
@@ -37,14 +39,14 @@ public class FirebaseSyncController {
             firebaseSyncService.pullAllFromFirebase();
             Map<String, Long> localCounts = firebaseSyncService.getLocalCounts();
             Map<String, Long> remoteCounts = firebaseSyncService.getRemoteCounts();
-            firebaseSyncService.pushAllToFirebase();
             return ResponseEntity.ok(Map.of(
                     "status", "ok",
-                    "action", "refresh",
+                    "action", "pull",
                     "localCounts", localCounts,
                     "remoteCounts", remoteCounts
             ));
         } catch (RuntimeException ex) {
+            log.error("Firebase sync refresh failed", ex);
             return ResponseEntity.status(500).body(Map.of(
                     "status", "error",
                     "message", ex.getMessage()

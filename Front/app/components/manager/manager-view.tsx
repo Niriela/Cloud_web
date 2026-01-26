@@ -11,6 +11,15 @@ import {
   type TypeSignalement,
 } from "~/lib/api";
 import {
+  getFirestoreEntreprises,
+  getFirestoreSignalements,
+  getFirestoreStatuts,
+  getFirestoreTypeSignalements,
+  mapFirestoreSignalementsRaw,
+  normalizeLabel,
+  updateFirestoreSignalement,
+} from "~/lib/firestore-data";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -18,6 +27,8 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { collection, getFirestore, onSnapshot } from "firebase/firestore";
+import { firebaseAuth } from "~/lib/firebase";
 
 type Draft = {
   surface: string;
@@ -42,6 +53,36 @@ const buildDrafts = (items: SignalementMapDto[]) =>
 const numberOrNull = (value: string) =>
   value.trim() === "" ? null : Number(value);
 
+const withLookups = (
+  items: SignalementMapDto[],
+  statuts: Statut[],
+  entreprises: Entreprise[],
+  types: TypeSignalement[],
+) =>
+  items.map((item) => ({
+    ...item,
+    statutsId:
+      item.statut && statuts.length
+        ? statuts.find(
+            (s) => normalizeLabel(s.libelle) === normalizeLabel(item.statut),
+          )?.id ?? null
+        : item.statutsId,
+    typeSignalementId:
+      item.typeSignalement && types.length
+        ? types.find(
+            (t) =>
+              normalizeLabel(t.libelle) === normalizeLabel(item.typeSignalement),
+          )?.id ?? null
+        : item.typeSignalementId,
+    entrepriseId:
+      item.entreprise && entreprises.length
+        ? entreprises.find(
+            (e) =>
+              normalizeLabel(e.name) === normalizeLabel(item.entreprise),
+          )?.id ?? null
+        : item.entrepriseId,
+  }));
+
 export default function ManagerView() {
   const [signalements, setSignalements] = useState<SignalementMapDto[]>([]);
   const [statuts, setStatuts] = useState<Statut[]>([]);
@@ -51,23 +92,74 @@ export default function ManagerView() {
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isFirestoreSource, setIsFirestoreSource] = useState(false);
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
-    Promise.all([
-      getSignalements(),
-      getStatuts(),
-      getEntreprises(),
-      getTypeSignalements(),
-    ])
-      .then(([signalementsData, statutsData, entreprisesData, typesData]) => {
+    const load = async () => {
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        try {
+          const [signalementsData, statutsData, entreprisesData, typesData] =
+            await Promise.all([
+              getFirestoreSignalements(),
+              getFirestoreStatuts(),
+              getFirestoreEntreprises(),
+              getFirestoreTypeSignalements(),
+            ])
+          if (signalementsData.length > 0) {
+            return {
+              source: "firestore",
+              signalementsData,
+              statutsData,
+              entreprisesData,
+              typesData,
+            }
+          }
+        } catch {
+          // fall back to API if Firestore fails
+        }
+      }
+
+      const [signalementsData, statutsData, entreprisesData, typesData] =
+        await Promise.all([
+          getSignalements(),
+          getStatuts(),
+          getEntreprises(),
+          getTypeSignalements(),
+        ])
+
+      return {
+        source: "api",
+        signalementsData,
+        statutsData,
+        entreprisesData,
+        typesData,
+      }
+    }
+
+    load()
+      .then(
+        ({
+          source,
+          signalementsData,
+          statutsData,
+          entreprisesData,
+          typesData,
+        }) => {
         if (!active) return;
-        setSignalements(signalementsData);
+        const normalized = withLookups(
+          signalementsData,
+          statutsData,
+          entreprisesData,
+          typesData,
+        );
+        setSignalements(normalized);
         setStatuts(statutsData);
         setEntreprises(entreprisesData);
         setTypes(typesData);
-        setDrafts(buildDrafts(signalementsData));
+        setDrafts(buildDrafts(normalized));
+        setIsFirestoreSource(source === "firestore");
       })
       .catch(() => {
         if (!active) return;
@@ -82,6 +174,38 @@ export default function ManagerView() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isFirestoreSource || !navigator.onLine) {
+      return;
+    }
+
+    const db = getFirestore(firebaseAuth.app);
+    const unsubscribe = onSnapshot(
+      collection(db, "signalements"),
+      (snapshot) => {
+        try {
+          const raw = snapshot.docs.map((doc) => doc.data());
+          const mapped = mapFirestoreSignalementsRaw(
+            raw,
+            statuts,
+            entreprises,
+            types,
+          );
+          const normalized = withLookups(mapped, statuts, entreprises, types);
+          setSignalements(normalized);
+          setDrafts(buildDrafts(normalized));
+        } catch {
+          setError("Impossible de charger les données manager.");
+        }
+      },
+      () => {
+        setError("Impossible de charger les données manager.");
+      },
+    );
+
+    return () => unsubscribe();
+  }, [isFirestoreSource, statuts, entreprises, types]);
 
   const handleDraftChange = (
     id: number,
@@ -103,13 +227,32 @@ export default function ManagerView() {
     setSavingId(id);
     setError(null);
     try {
-      const updated = await updateSignalement(id, {
-        surface: numberOrNull(draft.surface),
-        budget: numberOrNull(draft.budget),
-        statutsId: numberOrNull(draft.statutsId),
-        entrepriseId: numberOrNull(draft.entrepriseId),
-        typeSignalementId: numberOrNull(draft.typeSignalementId),
-      });
+      const updated = isFirestoreSource
+        ? await updateFirestoreSignalement(id, {
+            surface: numberOrNull(draft.surface),
+            budget: numberOrNull(draft.budget),
+            statutsId: numberOrNull(draft.statutsId),
+            typeSignalementId: numberOrNull(draft.typeSignalementId),
+            entrepriseId: numberOrNull(draft.entrepriseId),
+            statutsLabel:
+              statuts.find((item) => item.id === numberOrNull(draft.statutsId))
+                ?.libelle ?? null,
+            typeLabel:
+              types.find(
+                (item) => item.id === numberOrNull(draft.typeSignalementId),
+              )?.libelle ?? null,
+            entrepriseLabel:
+              entreprises.find(
+                (item) => item.id === numberOrNull(draft.entrepriseId),
+              )?.name ?? null,
+          })
+        : await updateSignalement(id, {
+            surface: numberOrNull(draft.surface),
+            budget: numberOrNull(draft.budget),
+            statutsId: numberOrNull(draft.statutsId),
+            entrepriseId: numberOrNull(draft.entrepriseId),
+            typeSignalementId: numberOrNull(draft.typeSignalementId),
+          });
       setSignalements((prev) =>
         prev.map((item) => (item.id === id ? updated : item)),
       );
@@ -145,6 +288,7 @@ export default function ManagerView() {
                 <tr className="border-b">
                   <th className="px-3 py-2 text-left">ID</th>
                   <th className="px-3 py-2 text-left">Type</th>
+                  <th className="px-3 py-2 text-left">Description</th>
                   <th className="px-3 py-2 text-left">Statut</th>
                   <th className="px-3 py-2 text-left">Surface (m²)</th>
                   <th className="px-3 py-2 text-left">Budget</th>
@@ -179,6 +323,14 @@ export default function ManagerView() {
                         </select>
                       </td>
                       <td className="px-3 py-2">
+                        <span
+                          className="block max-w-[240px] truncate"
+                          title={item.description ?? undefined}
+                        >
+                          {item.description ?? "-"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
                         <select
                           className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs"
                           value={draft?.statutsId ?? ""}
@@ -203,6 +355,7 @@ export default function ManagerView() {
                           className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs"
                           type="number"
                           step="0.01"
+                          placeholder={item.surface?.toString() ?? ""}
                           value={draft?.surface ?? ""}
                           onChange={(event) =>
                             handleDraftChange(
@@ -218,6 +371,7 @@ export default function ManagerView() {
                           className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs"
                           type="number"
                           step="0.01"
+                          placeholder={item.budget?.toString() ?? ""}
                           value={draft?.budget ?? ""}
                           onChange={(event) =>
                             handleDraftChange(
@@ -265,7 +419,7 @@ export default function ManagerView() {
                   <tr>
                     <td
                       className="px-3 py-6 text-center text-sm text-muted-foreground"
-                      colSpan={7}
+                      colSpan={8}
                     >
                       Aucun signalement disponible.
                     </td>

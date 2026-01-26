@@ -72,8 +72,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     try {
       await syncFirebase()
       setSyncMessage("Synchronisation terminee.")
-    } catch {
-      setSyncMessage("Echec de la synchronisation.")
+    } catch (error) {
+      if (error && typeof error === "object" && "message" in error) {
+        setSyncMessage(String(error.message))
+      } else {
+        setSyncMessage("Echec de la synchronisation.")
+      }
     } finally {
       setIsSyncing(false)
     }

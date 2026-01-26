@@ -59,6 +59,7 @@ export type SignalementMapDto = {
   latitude: number | null;
   longitude: number | null;
   date: string | null;
+  description: string | null;
   surface: number | null;
   budget: number | null;
   statutsId: number | null;
