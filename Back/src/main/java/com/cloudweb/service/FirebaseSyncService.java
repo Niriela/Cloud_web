@@ -57,6 +57,11 @@ public class FirebaseSyncService {
     private final HistoriqueSignalementsRepository historiqueSignalementsRepository;
     private final HistoriqueUsersRepository historiqueUsersRepository;
 
+    private Map<String, DocumentReference> remotePointByCoord = new HashMap<>();
+    private Map<Long, DocumentReference> remotePointById = new HashMap<>();
+    private Map<String, DocumentReference> remoteSignalementByKey = new HashMap<>();
+    private Map<Long, DocumentReference> remoteSignalementById = new HashMap<>();
+
     public Map<String, Long> getLocalCounts() {
         Map<String, Long> counts = new HashMap<>();
         counts.put("statuts_user", statutsUserRepository.count());
@@ -91,8 +96,12 @@ public class FirebaseSyncService {
 
     public void pushAllToFirebase() {
         WriteBatch batch = firestore.batch();
+        prepareRemoteIndexes(batch);
 
         for (StatutsUser statutsUser : statutsUserRepository.findAll()) {
+            if (!shouldPush("statuts_user", statutsUser.getId(), statutsUser.getUpdatedAt())) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("statuts_user", statutsUser.getId(), batch);
             batch.set(ref, Map.of(
                     "id", statutsUser.getId(),
@@ -102,6 +111,9 @@ public class FirebaseSyncService {
         }
 
         for (UserType userType : userTypeRepository.findAll()) {
+            if (!shouldPush("user_type", userType.getId(), userType.getUpdatedAt())) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("user_type", userType.getId(), batch);
             batch.set(ref, Map.of(
                     "id", userType.getId(),
@@ -111,16 +123,23 @@ public class FirebaseSyncService {
         }
 
         for (ReglesGestion regle : reglesGestionRepository.findAll()) {
+            LocalDateTime regleUpdatedAt = regle.getUpdatedAt();
+            if (!shouldPush("regles_gestion", regle.getId(), regleUpdatedAt)) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("regles_gestion", regle.getId(), batch);
             batch.set(ref, Map.of(
                     "id", regle.getId(),
                     "libelle", regle.getLibelle(),
                     "valeur", regle.getValeur(),
-                    "updated_at", formatDate(regle.getUpdatedAt())
+                    "updated_at", formatDate(regleUpdatedAt != null ? regleUpdatedAt : LocalDateTime.now())
             ));
         }
 
         for (TypeSignalement type : typeSignalementRepository.findAll()) {
+            if (!shouldPush("type_signalements", type.getId(), type.getUpdatedAt())) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("type_signalements", type.getId(), batch);
             batch.set(ref, Map.of(
                     "id", type.getId(),
@@ -130,6 +149,9 @@ public class FirebaseSyncService {
         }
 
         for (Statuts statut : statutsRepository.findAll()) {
+            if (!shouldPush("statuts", statut.getId(), statut.getUpdatedAt())) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("statuts", statut.getId(), batch);
             batch.set(ref, Map.of(
                     "id", statut.getId(),
@@ -139,6 +161,9 @@ public class FirebaseSyncService {
         }
 
         for (Entreprise entreprise : entrepriseRepository.findAll()) {
+            if (!shouldPush("entreprises", entreprise.getId(), entreprise.getUpdatedAt())) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("entreprises", entreprise.getId(), batch);
             batch.set(ref, Map.of(
                     "id", entreprise.getId(),
@@ -151,7 +176,10 @@ public class FirebaseSyncService {
         }
 
         for (Point point : pointRepository.findAll()) {
-            DocumentReference ref = resolveRemoteDoc("points", point.getId(), batch);
+            if (!shouldPush("points", point.getId(), point.getUpdatedAt())) {
+                continue;
+            }
+            DocumentReference ref = resolveRemotePointDoc(point, batch);
             batch.set(ref, Map.of(
                     "id", point.getId(),
                     "latitude", point.getLatitude(),
@@ -161,7 +189,10 @@ public class FirebaseSyncService {
         }
 
         for (Signalements signalement : signalementsRepository.findAll()) {
-            DocumentReference ref = resolveRemoteDoc("signalements", signalement.getId(), batch);
+            if (!shouldPush("signalements", signalement.getId(), signalement.getUpdatedAt())) {
+                continue;
+            }
+            DocumentReference ref = resolveRemoteSignalementDoc(signalement, batch);
             Map<String, Object> data = new HashMap<>();
             data.put("id", signalement.getId());
             data.put("user_id", signalement.getUser() != null ? signalement.getUser().getId() : null);
@@ -179,6 +210,9 @@ public class FirebaseSyncService {
         }
 
         for (User user : userRepository.findAll()) {
+            if (!shouldPush("users", user.getId(), user.getUpdatedAt())) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("users", user.getId(), batch);
             Map<String, Object> data = new HashMap<>();
             data.put("id", user.getId());
@@ -198,6 +232,9 @@ public class FirebaseSyncService {
         }
 
         for (HistoriqueSignalements historique : historiqueSignalementsRepository.findAll()) {
+            if (!shouldPush("historique_signalements", historique.getId(), historique.getUpdatedAt())) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("historique_signalements", historique.getId(), batch);
             Map<String, Object> data = new HashMap<>();
             data.put("id", historique.getId());
@@ -211,6 +248,9 @@ public class FirebaseSyncService {
         }
 
         for (HistoriqueUsers historique : historiqueUsersRepository.findAll()) {
+            if (!shouldPush("historique_users", historique.getId(), historique.getUpdatedAt())) {
+                continue;
+            }
             DocumentReference ref = resolveRemoteDoc("historique_users", historique.getId(), batch);
             Map<String, Object> data = new HashMap<>();
             data.put("id", historique.getId());
@@ -859,6 +899,180 @@ public class FirebaseSyncService {
             Thread.currentThread().interrupt();
         }
         return firestore.collection(collection).document(String.valueOf(id));
+    }
+
+    private DocumentReference resolveRemotePointDoc(Point point, WriteBatch batch) {
+        if (point == null) {
+            return firestore.collection("points").document();
+        }
+        if (point.getId() != null) {
+            DocumentReference byId = remotePointById.get(point.getId());
+            if (byId != null) {
+                return byId;
+            }
+        }
+        Double latitude = normalizeCoordinate(point.getLatitude());
+        Double longitude = normalizeCoordinate(point.getLongitude());
+        if (latitude != null && longitude != null) {
+            String key = coordinateKey(latitude, longitude);
+            DocumentReference byCoords = remotePointByCoord.get(key);
+            if (byCoords != null) {
+                return byCoords;
+            }
+        }
+        if (point.getId() != null) {
+            return firestore.collection("points").document(String.valueOf(point.getId()));
+        }
+        return firestore.collection("points").document();
+    }
+
+    private DocumentReference resolveRemoteSignalementDoc(Signalements signalement, WriteBatch batch) {
+        if (signalement == null) {
+            return firestore.collection("signalements").document();
+        }
+        if (signalement.getId() != null) {
+            DocumentReference byId = remoteSignalementById.get(signalement.getId());
+            if (byId != null) {
+                return byId;
+            }
+        }
+        String key = signalementKey(
+                signalement.getPoint() != null ? signalement.getPoint().getId() : null,
+                signalement.getTypeSignalement() != null ? signalement.getTypeSignalement().getId() : null,
+                signalement.getDate() != null ? signalement.getDate().toString() : null,
+                signalement.getUser() != null ? signalement.getUser().getId() : null
+        );
+        DocumentReference byNaturalKey = key != null ? remoteSignalementByKey.get(key) : null;
+        if (byNaturalKey != null) {
+            return byNaturalKey;
+        }
+        if (signalement.getId() != null) {
+            return firestore.collection("signalements").document(String.valueOf(signalement.getId()));
+        }
+        return firestore.collection("signalements").document();
+    }
+
+    private void prepareRemoteIndexes(WriteBatch batch) {
+        remotePointByCoord = new HashMap<>();
+        remotePointById = new HashMap<>();
+        remoteSignalementByKey = new HashMap<>();
+        remoteSignalementById = new HashMap<>();
+
+        try {
+            QuerySnapshot points = firestore.collection("points").get().get();
+            for (DocumentSnapshot doc : points.getDocuments()) {
+                Long id = getLong(doc, "id");
+                if (id != null) {
+                    DocumentReference existing = remotePointById.putIfAbsent(id, doc.getReference());
+                    if (existing != null) {
+                        batch.delete(doc.getReference());
+                    }
+                }
+                Double lat = normalizeCoordinate(getDouble(doc, "latitude"));
+                Double lon = normalizeCoordinate(getDouble(doc, "longitude"));
+                if (lat != null && lon != null) {
+                    String key = coordinateKey(lat, lon);
+                    DocumentReference existing = remotePointByCoord.putIfAbsent(key, doc.getReference());
+                    if (existing != null) {
+                        batch.delete(doc.getReference());
+                    }
+                }
+            }
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+        }
+
+        try {
+            QuerySnapshot signalements = firestore.collection("signalements").get().get();
+            for (DocumentSnapshot doc : signalements.getDocuments()) {
+                Long id = getLong(doc, "id");
+                if (id != null) {
+                    DocumentReference existing = remoteSignalementById.putIfAbsent(id, doc.getReference());
+                    if (existing != null) {
+                        batch.delete(doc.getReference());
+                    }
+                }
+                String key = signalementKey(
+                        getLong(doc, "point_id"),
+                        getLong(doc, "type_signalement_id"),
+                        getDate(doc, "date") != null ? getDate(doc, "date").toString() : null,
+                        getLong(doc, "user_id")
+                );
+                if (key != null) {
+                    DocumentReference existing = remoteSignalementByKey.putIfAbsent(key, doc.getReference());
+                    if (existing != null) {
+                        batch.delete(doc.getReference());
+                    }
+                }
+            }
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private String coordinateKey(Double latitude, Double longitude) {
+        if (latitude == null || longitude == null) {
+            return null;
+        }
+        return latitude + "," + longitude;
+    }
+
+    private String signalementKey(Long pointId, Long typeId, String date, Long userId) {
+        if (pointId == null || typeId == null || date == null) {
+            return null;
+        }
+        String base = pointId + "|" + typeId + "|" + date;
+        return userId != null ? base + "|" + userId : base;
+    }
+
+    private boolean shouldPush(String collection, Long id, LocalDateTime localUpdatedAt) {
+        LocalDateTime remoteUpdatedAt = getRemoteUpdatedAt(collection, id);
+        if (localUpdatedAt == null) {
+            return remoteUpdatedAt == null;
+        }
+        if (remoteUpdatedAt == null) {
+            return true;
+        }
+        return localUpdatedAt.isAfter(remoteUpdatedAt);
+    }
+
+    private LocalDateTime getRemoteUpdatedAt(String collection, Long id) {
+        if (id == null) {
+            return null;
+        }
+        try {
+            QuerySnapshot snapshot = firestore.collection(collection)
+                    .whereEqualTo("id", id)
+                    .get()
+                    .get();
+            var docs = snapshot.getDocuments();
+            if (!docs.isEmpty()) {
+                return resolveUpdatedAtFromDoc(docs.get(0));
+            }
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            QuerySnapshot snapshot = firestore.collection(collection)
+                    .whereEqualTo("id", String.valueOf(id))
+                    .get()
+                    .get();
+            var docs = snapshot.getDocuments();
+            if (!docs.isEmpty()) {
+                return resolveUpdatedAtFromDoc(docs.get(0));
+            }
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+        }
+        return null;
+    }
+
+    private LocalDateTime resolveUpdatedAtFromDoc(DocumentSnapshot doc) {
+        LocalDateTime value = getDate(doc, "updated_at");
+        if (value != null) {
+            return value;
+        }
+        return getDate(doc, "updatedAt");
     }
 
     private Long getLong(DocumentSnapshot doc, String field) {

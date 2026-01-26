@@ -52,6 +52,12 @@ export type AuthResponse = {
   email: string;
   firstName: string;
   lastName: string;
+  expiresAt?: string | null;
+};
+
+export type LoginPayload = {
+  email: string;
+  password: string;
 };
 
 export type SignalementMapDto = {
@@ -109,6 +115,13 @@ export type SignalementsStats = {
 export function getAuthSession() {
   return apiRequest<AuthResponse>("/api/auth/session", {
     method: "GET",
+  });
+}
+
+export function loginOffline(payload: LoginPayload) {
+  return apiRequest<AuthResponse>("/api/auth/offline/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

@@ -39,9 +39,10 @@ public class FirebaseSyncController {
             firebaseSyncService.pullAllFromFirebase();
             Map<String, Long> localCounts = firebaseSyncService.getLocalCounts();
             Map<String, Long> remoteCounts = firebaseSyncService.getRemoteCounts();
+            firebaseSyncService.pushAllToFirebase();
             return ResponseEntity.ok(Map.of(
                     "status", "ok",
-                    "action", "pull",
+                    "action", "refresh",
                     "localCounts", localCounts,
                     "remoteCounts", remoteCounts
             ));

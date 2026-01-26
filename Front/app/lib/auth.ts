@@ -18,6 +18,10 @@ export function clearAuthSession() {
 }
 
 export function getAuthToken() {
+  const user = getAuthUser()
+  if (!user) {
+    return null
+  }
   return localStorage.getItem(TOKEN_KEY)
 }
 
@@ -28,7 +32,15 @@ export function getAuthUser(): AuthResponse | null {
   }
 
   try {
-    return JSON.parse(raw) as AuthResponse
+    const parsed = JSON.parse(raw) as AuthResponse
+    if (parsed?.expiresAt) {
+      const expiresAt = Date.parse(parsed.expiresAt)
+      if (!Number.isNaN(expiresAt) && Date.now() > expiresAt) {
+        clearAuthSession()
+        return null
+      }
+    }
+    return parsed
   } catch {
     return null
   }

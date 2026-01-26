@@ -9,7 +9,7 @@ import {
   FieldSeparator,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
-import { getAuthSession } from "~/lib/api"
+import { getAuthSession, loginOffline } from "~/lib/api"
 import { useAuth } from "~/components/auth/auth-provider"
 import { useState } from "react"
 import { useNavigate } from "react-router"
@@ -35,22 +35,22 @@ export function LoginForm({
 
     try {
       if (!navigator.onLine) {
-        throw new Error(
-          "Connexion impossible hors ligne. Reconnectez-vous a internet.",
+        const response = await loginOffline({ email, password })
+        setSession(response)
+        navigate("/Visiteurs")
+      } else {
+        const credential = await signInWithEmailAndPassword(
+          firebaseAuth,
+          email,
+          password,
         )
+        const idToken = await credential.user.getIdToken()
+        setAuthToken(idToken)
+
+        const response = await getAuthSession()
+        setSession(response)
+        navigate("/Visiteurs")
       }
-
-      const credential = await signInWithEmailAndPassword(
-        firebaseAuth,
-        email,
-        password,
-      )
-      const idToken = await credential.user.getIdToken()
-      setAuthToken(idToken)
-
-      const response = await getAuthSession()
-      setSession(response)
-      navigate("/Visiteurs")
     } catch (err) {
       clearAuthSession()
       const rawMessage =

@@ -1,6 +1,7 @@
 package com.cloudweb.controller;
 
 import com.cloudweb.dto.AuthResponse;
+import com.cloudweb.dto.LoginRequest;
 import com.cloudweb.service.AuthService;
 import com.cloudweb.security.FirebaseUserPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -83,6 +84,112 @@ public class AuthController {
     })
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("API is running");
+    }
+
+    @PostMapping("/login")
+    @Operation(
+            summary = "Connexion locale",
+            description = "Authentifie un utilisateur avec la base locale et applique les regles de blocage."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Connexion valide"),
+            @ApiResponse(responseCode = "401", description = "Identifiants invalides"),
+            @ApiResponse(responseCode = "403", description = "Utilisateur bloque ou non autorise"),
+            @ApiResponse(responseCode = "404", description = "Utilisateur introuvable")
+    })
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        try {
+            AuthResponse authResponse = authService.loginWithPassword(request);
+            return ResponseEntity.ok(authResponse);
+        } catch (RuntimeException ex) {
+            String message = ex.getMessage() != null ? ex.getMessage() : "Access denied";
+            HttpStatus status = HttpStatus.BAD_REQUEST;
+            if ("Invalid credentials".equalsIgnoreCase(message)) {
+                status = HttpStatus.UNAUTHORIZED;
+            } else if ("User is blocked".equalsIgnoreCase(message)) {
+                status = HttpStatus.FORBIDDEN;
+            } else if ("Access denied".equalsIgnoreCase(message)) {
+                status = HttpStatus.FORBIDDEN;
+            } else if ("User not registered".equalsIgnoreCase(message)) {
+                status = HttpStatus.NOT_FOUND;
+            }
+            return ResponseEntity.status(status).body(Map.of("message", message));
+        }
+    }
+
+    @PostMapping("/offline/login")
+    @Operation(
+            summary = "Connexion hors-ligne",
+            description = "Authentifie un utilisateur depuis la base locale."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Connexion valide"),
+            @ApiResponse(responseCode = "401", description = "Identifiants invalides"),
+            @ApiResponse(responseCode = "403", description = "Utilisateur bloque ou non autorise"),
+            @ApiResponse(responseCode = "404", description = "Utilisateur introuvable")
+    })
+    public ResponseEntity<?> offlineLogin(@RequestBody LoginRequest request) {
+        try {
+            AuthResponse authResponse = authService.loginOffline(request);
+            return ResponseEntity.ok(authResponse);
+        } catch (RuntimeException ex) {
+            String message = ex.getMessage() != null ? ex.getMessage() : "Access denied";
+            HttpStatus status = HttpStatus.BAD_REQUEST;
+            if ("Invalid credentials".equalsIgnoreCase(message)) {
+                status = HttpStatus.UNAUTHORIZED;
+            } else if ("User is blocked".equalsIgnoreCase(message)) {
+                status = HttpStatus.FORBIDDEN;
+            } else if ("Access denied".equalsIgnoreCase(message)) {
+                status = HttpStatus.FORBIDDEN;
+            } else if ("User not registered".equalsIgnoreCase(message)) {
+                status = HttpStatus.NOT_FOUND;
+            }
+            return ResponseEntity.status(status).body(Map.of("message", message));
+        }
+    }
+
+    @PostMapping("/failed-attempt")
+    @Operation(
+            summary = "Enregistrer un echec de connexion",
+            description = "Incremente les tentatives de connexion pour un utilisateur local."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Tentative enregistree"),
+            @ApiResponse(responseCode = "404", description = "Utilisateur introuvable")
+    })
+    public ResponseEntity<?> failedAttempt(@RequestBody LoginRequest request) {
+        try {
+            authService.registerFailedAttemptByIdentity(request.getEmail());
+            return ResponseEntity.ok(Map.of("status", "ok"));
+        } catch (RuntimeException ex) {
+            String message = ex.getMessage() != null ? ex.getMessage() : "User not registered";
+            HttpStatus status = "User not registered".equalsIgnoreCase(message)
+                    ? HttpStatus.NOT_FOUND
+                    : HttpStatus.BAD_REQUEST;
+            return ResponseEntity.status(status).body(Map.of("message", message));
+        }
+    }
+
+    @PostMapping("/login-success")
+    @Operation(
+            summary = "Reinitialiser les tentatives apres succes",
+            description = "Remet a zero les tentatives de connexion."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Reinitialisation ok"),
+            @ApiResponse(responseCode = "404", description = "Utilisateur introuvable")
+    })
+    public ResponseEntity<?> loginSuccess(@RequestBody LoginRequest request) {
+        try {
+            authService.resetFailedAttemptsByIdentity(request.getEmail());
+            return ResponseEntity.ok(Map.of("status", "ok"));
+        } catch (RuntimeException ex) {
+            String message = ex.getMessage() != null ? ex.getMessage() : "User not registered";
+            HttpStatus status = "User not registered".equalsIgnoreCase(message)
+                    ? HttpStatus.NOT_FOUND
+                    : HttpStatus.BAD_REQUEST;
+            return ResponseEntity.status(status).body(Map.of("message", message));
+        }
     }
 
     @PostMapping("/reset-block")

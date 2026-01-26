@@ -1,6 +1,7 @@
 package com.cloudweb.service;
 
 import com.cloudweb.dto.AuthResponse;
+import com.cloudweb.dto.LoginRequest;
 import com.cloudweb.dto.RegisterRequest;
 import com.cloudweb.entity.ReglesGestion;
 import com.cloudweb.entity.StatutsUser;
@@ -36,12 +37,49 @@ public class AuthService {
             throw new RuntimeException("Access denied");
         }
 
+        String expiresAt = resolveSessionExpiryIso();
         return AuthResponse.builder()
                 .token(idToken)
                 .id(user.getId())
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .expiresAt(expiresAt)
+                .build();
+    }
+
+    public AuthResponse loginOffline(LoginRequest request) {
+        return loginWithPassword(request);
+    }
+
+    public AuthResponse loginWithPassword(LoginRequest request) {
+        if (request == null || request.getEmail() == null || request.getPassword() == null) {
+            throw new RuntimeException("Invalid credentials");
+        }
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        if (user == null) {
+            throw new RuntimeException("User not registered");
+        }
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            registerFailedAttempt(user);
+            throw new RuntimeException("Invalid credentials");
+        }
+        resetFailedAttempts(user);
+        if (isBlocked(user)) {
+            throw new RuntimeException("User is blocked");
+        }
+        if (!isManager(user)) {
+            throw new RuntimeException("Access denied");
+        }
+
+        long expiresAtEpochMs = resolveSessionExpiryEpochMs();
+        return AuthResponse.builder()
+                .token("offline:" + user.getId() + ":" + expiresAtEpochMs)
+                .id(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .expiresAt(java.time.Instant.ofEpochMilli(expiresAtEpochMs).toString())
                 .build();
     }
 
@@ -151,6 +189,28 @@ public class AuthService {
         }
     }
 
+    public void registerFailedAttemptByIdentity(String email) {
+        if (email == null || email.isBlank()) {
+            throw new RuntimeException("User not registered");
+        }
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            throw new RuntimeException("User not registered");
+        }
+        registerFailedAttempt(user);
+    }
+
+    public void resetFailedAttemptsByIdentity(String email) {
+        if (email == null || email.isBlank()) {
+            throw new RuntimeException("User not registered");
+        }
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            throw new RuntimeException("User not registered");
+        }
+        resetFailedAttempts(user);
+    }
+
     private int resolveMaxAttempts() {
         try {
             ReglesGestion regle = reglesGestionRepository
@@ -163,6 +223,31 @@ public class AuthService {
             return value > 0 ? value : 3;
         } catch (Exception ex) {
             return 3;
+        }
+    }
+
+    private long resolveSessionExpiryEpochMs() {
+        long durationMinutes = resolveSessionDurationMinutes();
+        long durationMs = durationMinutes * 60_000L;
+        return System.currentTimeMillis() + durationMs;
+    }
+
+    private String resolveSessionExpiryIso() {
+        return java.time.Instant.ofEpochMilli(resolveSessionExpiryEpochMs()).toString();
+    }
+
+    private long resolveSessionDurationMinutes() {
+        try {
+            ReglesGestion regle = reglesGestionRepository
+                    .findByLibelle("Duree_vie_session")
+                    .orElse(null);
+            if (regle == null || regle.getValeur() == null) {
+                return 30;
+            }
+            long value = Long.parseLong(regle.getValeur());
+            return value > 0 ? value : 30;
+        } catch (Exception ex) {
+            return 30;
         }
     }
 

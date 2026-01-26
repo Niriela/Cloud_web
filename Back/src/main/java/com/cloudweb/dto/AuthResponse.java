@@ -25,4 +25,6 @@ public class AuthResponse {
     private String firstName;
     @Schema(description = "Nom", example = "Diallo")
     private String lastName;
+    @Schema(description = "Expiration de session (ISO 8601)", example = "2026-01-27T01:30:00Z")
+    private String expiresAt;
 }

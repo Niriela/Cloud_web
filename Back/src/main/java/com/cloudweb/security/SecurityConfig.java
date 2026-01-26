@@ -29,6 +29,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/health").permitAll()
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/offline/login").permitAll()
+                        .requestMatchers("/api/auth/failed-attempt").permitAll()
+                        .requestMatchers("/api/auth/login-success").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/signalements/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/type-signalements/**").permitAll()

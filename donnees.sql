@@ -41,7 +41,7 @@ INSERT INTO Statuts (id, libelle) VALUES
 (3, 'Terminé'),
 (4, 'Annulé');
 
-INSERT INTO Regles_gestion (id, libelle, valeur) VALUES
+INSERT INTO regles_gestion (id, libelle, valeur) VALUES
 (1, 'Duree_vie_session', '30'),
 (2, 'Nombre_tentative_connexion', '3');
 
