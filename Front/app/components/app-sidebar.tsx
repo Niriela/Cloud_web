@@ -16,6 +16,7 @@ import {
   SidebarRail,
 } from "~/components/ui/sidebar"
 import { syncFirebase } from "~/lib/api"
+import { useAuth } from "~/components/auth/auth-provider"
 
 // This is sample data.
 const data = {
@@ -26,19 +27,9 @@ const data = {
   },
   teams: [
     {
-      name: "Acme Inc",
+      name: "Gestion des routes",
       logo: GalleryVerticalEnd,
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: Map,
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: GalleryVerticalEnd,
-      plan: "Free",
+      plan: "Projet",
     },
   ],
   navMain: [
@@ -71,6 +62,7 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { isAuthenticated } = useAuth()
   const [syncMessage, setSyncMessage] = React.useState<string | null>(null)
   const [isSyncing, setIsSyncing] = React.useState(false)
 
@@ -87,29 +79,48 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   }
 
+  const navItems = isAuthenticated
+    ? data.navMain
+    : [
+        {
+          title: "Navigation",
+          url: "#",
+          icon: Map,
+          isActive: true,
+          items: [
+            {
+              title: "Accueil",
+              url: "/",
+            },
+          ],
+        },
+      ]
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navItems} />
       </SidebarContent>
       <SidebarFooter>
-        <div className="p-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={isSyncing}
-            onClick={handleSync}
-          >
-            {isSyncing ? "Synchronisation..." : "Synchroniser"}
-          </Button>
-          {syncMessage ? (
-            <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p>
-          ) : null}
-        </div>
+        {isAuthenticated ? (
+          <div className="p-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={isSyncing}
+              onClick={handleSync}
+            >
+              {isSyncing ? "Synchronisation..." : "Synchroniser"}
+            </Button>
+            {syncMessage ? (
+              <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p>
+            ) : null}
+          </div>
+        ) : null}
         <NavUser user={data.user} />
       </SidebarFooter>
       <SidebarRail />

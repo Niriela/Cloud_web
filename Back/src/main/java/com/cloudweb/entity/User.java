@@ -25,6 +25,9 @@ public class User {
     @Column(nullable = false)
     private String password;
 
+    @Column(name = "firebase_id", unique = true)
+    private String firebaseId;
+
     @Column(name = "first_name", nullable = false)
     private String firstName;
 

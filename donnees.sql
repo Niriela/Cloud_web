@@ -1,4 +1,4 @@
-- Users (id, email, password, first_name, last_name, date, statuts_user_id, user_type_id) 
+- Users (id, firebase_id, email, password, first_name, last_name, date, statuts_user_id, user_type_id) 
 - Entreprise (id, name, address, phone, active)
 - Statuts (id, libelle)
 - Point (id, latitude, longitude)

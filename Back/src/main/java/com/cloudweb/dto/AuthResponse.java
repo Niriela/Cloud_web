@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @Schema(description = "Reponse d'authentification")
 public class AuthResponse {
-    @Schema(description = "Token JWT", example = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
+    @Schema(description = "Token Firebase (ID token)", example = "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij...")
     private String token;
     @Builder.Default
     @Schema(description = "Type de jeton", example = "Bearer")

@@ -9,7 +9,6 @@ import {
   FieldSeparator,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
-import { register } from "~/lib/api"
 import { useAuth } from "~/components/auth/auth-provider"
 import { useState } from "react"
 import { useNavigate } from "react-router"
@@ -32,24 +31,8 @@ export function RegisterForm({
     setError(null)
     setIsLoading(true)
 
-    try {
-      const response = await register({
-        email,
-        password,
-        firstName,
-        lastName,
-      })
-      setSession(response)
-      navigate("/Visiteurs")
-    } catch (err) {
-      const message =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message?: string }).message)
-          : "Registration failed"
-      setError(message)
-    } finally {
-      setIsLoading(false)
-    }
+    setError("Registration is disabled. Contactez le manager.")
+    setIsLoading(false)
   }
 
   return (

@@ -1,9 +1,8 @@
 package com.cloudweb.controller;
 
 import com.cloudweb.dto.AuthResponse;
-import com.cloudweb.dto.LoginRequest;
-import com.cloudweb.dto.RegisterRequest;
 import com.cloudweb.service.AuthService;
+import com.cloudweb.security.FirebaseUserPrincipal;
 import lombok.RequiredArgsConstructor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -13,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import java.util.Map;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -24,35 +24,36 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @PostMapping("/login")
+    @GetMapping("/session")
     @Operation(
-            summary = "Authentifier un utilisateur",
-            description = "Retourne un token JWT si l'email et le mot de passe sont valides."
+            summary = "Recuperer la session Firebase",
+            description = "Retourne le profil local associe au token Firebase."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Authentification reussie"),
-            @ApiResponse(responseCode = "401", description = "Identifiants invalides"),
+            @ApiResponse(responseCode = "200", description = "Session valide"),
+            @ApiResponse(responseCode = "401", description = "Token Firebase invalide"),
             @ApiResponse(responseCode = "403", description = "Utilisateur bloque"),
-            @ApiResponse(responseCode = "500", description = "Erreur interne")
+            @ApiResponse(responseCode = "404", description = "Utilisateur introuvable")
     })
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest loginRequest) {
-        AuthResponse authResponse = authService.login(loginRequest);
-        return ResponseEntity.ok(authResponse);
-    }
+    public ResponseEntity<AuthResponse> session(
+            Authentication authentication,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof FirebaseUserPrincipal principal)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
-    @PostMapping("/register")
-    @Operation(
-            summary = "Inscrire un nouvel utilisateur",
-            description = "Cree un compte et retourne un token JWT."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Inscription reussie"),
-            @ApiResponse(responseCode = "409", description = "Email deja utilise"),
-            @ApiResponse(responseCode = "500", description = "Erreur interne")
-    })
-    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest registerRequest) {
-        AuthResponse authResponse = authService.register(registerRequest);
-        return ResponseEntity.status(HttpStatus.CREATED).body(authResponse);
+        String token = null;
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            token = authorization.substring(7);
+        }
+
+        AuthResponse authResponse = authService.loginWithFirebase(
+                principal.getUid(),
+                principal.getEmail(),
+                token
+        );
+        return ResponseEntity.ok(authResponse);
     }
 
     @GetMapping("/health")

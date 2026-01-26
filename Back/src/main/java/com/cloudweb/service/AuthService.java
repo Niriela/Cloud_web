@@ -1,7 +1,6 @@
 package com.cloudweb.service;
 
 import com.cloudweb.dto.AuthResponse;
-import com.cloudweb.dto.LoginRequest;
 import com.cloudweb.dto.RegisterRequest;
 import com.cloudweb.entity.ReglesGestion;
 import com.cloudweb.entity.StatutsUser;
@@ -11,13 +10,10 @@ import com.cloudweb.repository.ReglesGestionRepository;
 import com.cloudweb.repository.StatutsUserRepository;
 import com.cloudweb.repository.UserTypeRepository;
 import com.cloudweb.repository.UserRepository;
-import com.cloudweb.security.JwtTokenProvider;
-import com.cloudweb.service.FirebaseSyncService;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseAuthException;
+import com.google.firebase.auth.UserRecord;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -31,39 +27,19 @@ public class AuthService {
     private final UserTypeRepository userTypeRepository;
     private final FirebaseSyncService firebaseSyncService;
     private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final JwtTokenProvider jwtTokenProvider;
-
-    public AuthResponse login(LoginRequest loginRequest) {
-        User user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new RuntimeException("Invalid credentials"));
-
+    public AuthResponse loginWithFirebase(String firebaseUid, String email, String idToken) {
+        User user = resolveUserByFirebase(firebaseUid, email);
         if (isBlocked(user)) {
             throw new RuntimeException("User is blocked");
         }
 
-        try {
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            loginRequest.getEmail(),
-                            loginRequest.getPassword()
-                    )
-            );
-
-            resetFailedAttempts(user);
-            String token = jwtTokenProvider.generateToken(authentication);
-
-            return AuthResponse.builder()
-                    .token(token)
-                    .id(user.getId())
-                    .email(user.getEmail())
-                    .firstName(user.getFirstName())
-                    .lastName(user.getLastName())
-                    .build();
-        } catch (AuthenticationException ex) {
-            registerFailedAttempt(user);
-            throw new RuntimeException("Invalid credentials");
-        }
+        return AuthResponse.builder()
+                .token(idToken)
+                .id(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .build();
     }
 
     public AuthResponse register(RegisterRequest registerRequest) {
@@ -75,12 +51,14 @@ public class AuthService {
             throw new RuntimeException("Email already exists");
         }
 
+        String firebaseUid = createFirebaseUser(registerRequest);
         StatutsUser actif = statutsUserRepository.findByLibelle("Actif").orElse(null);
         UserType utilisateur = userTypeRepository.findByLibelle("Utilisateur").orElse(null);
 
         User user = User.builder()
                 .email(registerRequest.getEmail())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
+                .firebaseId(firebaseUid)
                 .firstName(registerRequest.getFirstName())
                 .lastName(registerRequest.getLastName())
                 .statutsUser(actif)
@@ -90,6 +68,44 @@ public class AuthService {
         User saved = userRepository.save(user);
         firebaseSyncService.refreshAsync();
         return saved;
+    }
+
+    public User resolveUserByFirebase(String firebaseUid, String email) {
+        if (firebaseUid == null || firebaseUid.isBlank()) {
+            throw new RuntimeException("Missing Firebase uid");
+        }
+
+        User user = userRepository.findByFirebaseId(firebaseUid).orElse(null);
+        if (user != null) {
+            return user;
+        }
+
+        if (email == null || email.isBlank()) {
+            throw new RuntimeException("User not registered");
+        }
+
+        User byEmail = userRepository.findByEmail(email).orElse(null);
+        if (byEmail == null) {
+            throw new RuntimeException("User not registered");
+        }
+        if (byEmail.getFirebaseId() != null && !firebaseUid.equals(byEmail.getFirebaseId())) {
+            throw new RuntimeException("Firebase identity mismatch");
+        }
+        byEmail.setFirebaseId(firebaseUid);
+        return userRepository.save(byEmail);
+    }
+
+    private String createFirebaseUser(RegisterRequest registerRequest) {
+        UserRecord.CreateRequest request = new UserRecord.CreateRequest()
+                .setEmail(registerRequest.getEmail())
+                .setPassword(registerRequest.getPassword())
+                .setDisplayName(registerRequest.getFirstName() + " " + registerRequest.getLastName());
+        try {
+            UserRecord record = FirebaseAuth.getInstance().createUser(request);
+            return record.getUid();
+        } catch (FirebaseAuthException ex) {
+            throw new RuntimeException("Firebase user creation failed: " + ex.getMessage(), ex);
+        }
     }
 
     private boolean isBlocked(User user) {

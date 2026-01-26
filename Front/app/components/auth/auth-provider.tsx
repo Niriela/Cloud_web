@@ -12,6 +12,8 @@ import {
   getAuthUser,
   setAuthSession,
 } from "~/lib/auth"
+import { signOut } from "firebase/auth"
+import { firebaseAuth } from "~/lib/firebase"
 
 type AuthContextValue = {
   user: AuthResponse | null
@@ -34,6 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    signOut(firebaseAuth).catch(() => undefined)
     clearAuthSession()
     setUser(null)
     setToken(null)

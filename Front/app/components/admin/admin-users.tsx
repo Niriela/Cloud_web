@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { createManagerUser, getUsers, resetUserBlock, type UserAdmin } from "~/lib/api";
+import { createManagerUser, getUsers, resetUserBlock, updateUser, type UserAdmin } from "~/lib/api";
 
 const formatDate = (value?: string | null) => {
   if (!value) return "-";
@@ -15,6 +15,7 @@ export default function AdminUsers() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<number | null>(null);
+  const [savingId, setSavingId] = useState<number | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [newUser, setNewUser] = useState({
@@ -23,6 +24,7 @@ export default function AdminUsers() {
     firstName: "",
     lastName: "",
   });
+  const [drafts, setDrafts] = useState<Record<number, { email: string; firstName: string; lastName: string }>>({});
 
   useEffect(() => {
     let active = true;
@@ -31,6 +33,19 @@ export default function AdminUsers() {
       .then((data) => {
         if (!active) return;
         setUsers(data);
+        setDrafts(
+          data.reduce<Record<number, { email: string; firstName: string; lastName: string }>>(
+            (acc, user) => {
+              acc[user.id] = {
+                email: user.email ?? "",
+                firstName: user.firstName ?? "",
+                lastName: user.lastName ?? "",
+              };
+              return acc;
+            },
+            {},
+          ),
+        );
       })
       .catch(() => {
         if (!active) return;
@@ -44,6 +59,47 @@ export default function AdminUsers() {
       active = false;
     };
   }, []);
+
+  const handleDraftChange = (
+    id: number,
+    key: "email" | "firstName" | "lastName",
+    value: string,
+  ) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleSave = async (id: number) => {
+    const draft = drafts[id];
+    if (!draft) return;
+    setSavingId(id);
+    setError(null);
+    try {
+      const updated = await updateUser(id, {
+        email: draft.email,
+        firstName: draft.firstName,
+        lastName: draft.lastName,
+      });
+      setUsers((prev) => prev.map((user) => (user.id === id ? updated : user)));
+      setDrafts((prev) => ({
+        ...prev,
+        [id]: {
+          email: updated.email ?? "",
+          firstName: updated.firstName ?? "",
+          lastName: updated.lastName ?? "",
+        },
+      }));
+    } catch {
+      setError("Impossible de modifier l'utilisateur.");
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   const handleReset = async (userId: number) => {
     setActionId(userId);
@@ -166,26 +222,68 @@ export default function AdminUsers() {
                   <tr key={user.id} className="border-b last:border-0">
                     <td className="px-3 py-2">{user.id}</td>
                     <td className="px-3 py-2">
-                      {user.firstName} {user.lastName}
+                      <div className="flex flex-col gap-1">
+                        <input
+                          className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs"
+                          value={drafts[user.id]?.firstName ?? ""}
+                          onChange={(event) =>
+                            handleDraftChange(
+                              user.id,
+                              "firstName",
+                              event.target.value,
+                            )
+                          }
+                        />
+                        <input
+                          className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs"
+                          value={drafts[user.id]?.lastName ?? ""}
+                          onChange={(event) =>
+                            handleDraftChange(
+                              user.id,
+                              "lastName",
+                              event.target.value,
+                            )
+                          }
+                        />
+                      </div>
                     </td>
-                    <td className="px-3 py-2">{user.email}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs"
+                        value={drafts[user.id]?.email ?? ""}
+                        onChange={(event) =>
+                          handleDraftChange(user.id, "email", event.target.value)
+                        }
+                      />
+                    </td>
                     <td className="px-3 py-2">{user.userType ?? "-"}</td>
                     <td className="px-3 py-2">{user.statutsUser ?? "-"}</td>
                     <td className="px-3 py-2">{user.failedLoginAttempts ?? 0}</td>
                     <td className="px-3 py-2">{formatDate(user.date)}</td>
                     <td className="px-3 py-2 text-right">
-                      {user.statutsUser?.toLowerCase() === "bloque" ? (
+                      <div className="flex items-center justify-end gap-2">
                         <Button
                           size="sm"
                           type="button"
-                          disabled={actionId === user.id}
-                          onClick={() => handleReset(user.id)}
+                          variant="outline"
+                          disabled={savingId === user.id}
+                          onClick={() => handleSave(user.id)}
                         >
-                          {actionId === user.id ? "En cours..." : "Debloquer"}
+                          {savingId === user.id ? "En cours..." : "Enregistrer"}
                         </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
+                        {user.statutsUser?.toLowerCase() === "bloque" ? (
+                          <Button
+                            size="sm"
+                            type="button"
+                            disabled={actionId === user.id}
+                            onClick={() => handleReset(user.id)}
+                          >
+                            {actionId === user.id ? "En cours..." : "Debloquer"}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -1,2 +1,4 @@
 /Front/node_modules
 /Back/target
+.env
+Front/.env

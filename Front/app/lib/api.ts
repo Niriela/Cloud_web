@@ -47,18 +47,6 @@ export type AuthResponse = {
   lastName: string;
 };
 
-export type LoginPayload = {
-  email: string;
-  password: string;
-};
-
-export type RegisterPayload = {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-};
-
 export type SignalementMapDto = {
   id: number;
   latitude: number | null;
@@ -110,17 +98,9 @@ export type SignalementsStats = {
   advancementPercent: number;
 };
 
-export function login(payload: LoginPayload) {
-  return apiRequest<AuthResponse>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function register(payload: RegisterPayload) {
-  return apiRequest<AuthResponse>("/api/auth/register", {
-    method: "POST",
-    body: JSON.stringify(payload),
+export function getAuthSession() {
+  return apiRequest<AuthResponse>("/api/auth/session", {
+    method: "GET",
   });
 }
 
@@ -189,6 +169,16 @@ export function getUsers() {
 export function resetUserBlock(userId: number) {
   return apiRequest<void>(`/api/auth/reset-block?userId=${userId}`, {
     method: "POST",
+  });
+}
+
+export function updateUser(
+  id: number,
+  payload: { email?: string; firstName?: string; lastName?: string },
+) {
+  return apiRequest<UserAdmin>(`/api/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
   });
 }
 

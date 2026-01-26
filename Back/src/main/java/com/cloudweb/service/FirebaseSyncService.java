@@ -157,6 +157,7 @@ public class FirebaseSyncService {
             data.put("id", user.getId());
             data.put("email", user.getEmail());
             data.put("password", user.getPassword());
+            data.put("firebase_id", user.getFirebaseId());
             data.put("first_name", user.getFirstName());
             data.put("last_name", user.getLastName());
             data.put("date", user.getDate() != null ? user.getDate().toString() : null);
@@ -391,6 +392,7 @@ public class FirebaseSyncService {
             user.setId(id);
             user.setEmail(doc.getString("email"));
             user.setPassword(doc.getString("password"));
+            user.setFirebaseId(doc.getString("firebase_id"));
             user.setFirstName(doc.getString("first_name"));
             user.setLastName(doc.getString("last_name"));
 
