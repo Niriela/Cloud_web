@@ -44,3 +44,20 @@ INSERT INTO Statuts (id, libelle) VALUES
 INSERT INTO Regles_gestion (id, libelle, valeur) VALUES
 (1, 'Duree_vie_session', '30'),
 (2, 'Nombre_tentative_connexion', '3');
+
+
+INSERT INTO users (
+  firebase_id, email, password, first_name, last_name,
+  date, updated_at, failed_login_attempts, statuts_user_id, user_type_id
+) VALUES (
+  'ABpjxL9FlmQjig7U1rXc2oBYQRv2',
+  'manager@example.com',
+  '123456',
+  'Manager',
+  'Admin',
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP,
+  0,
+  1,
+  3
+);

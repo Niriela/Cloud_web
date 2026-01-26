@@ -32,8 +32,23 @@ public class FirebaseSyncController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<Map<String, String>> refresh() {
-        firebaseSyncService.refreshAsync();
-        return ResponseEntity.accepted().body(Map.of("status", "accepted", "action", "refresh"));
+    public ResponseEntity<Map<String, Object>> refresh() {
+        try {
+            firebaseSyncService.pullAllFromFirebase();
+            Map<String, Long> localCounts = firebaseSyncService.getLocalCounts();
+            Map<String, Long> remoteCounts = firebaseSyncService.getRemoteCounts();
+            firebaseSyncService.pushAllToFirebase();
+            return ResponseEntity.ok(Map.of(
+                    "status", "ok",
+                    "action", "refresh",
+                    "localCounts", localCounts,
+                    "remoteCounts", remoteCounts
+            ));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "status", "error",
+                    "message", ex.getMessage()
+            ));
+        }
     }
 }

@@ -28,6 +28,7 @@ import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +39,7 @@ import java.util.concurrent.ExecutionException;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class FirebaseSyncService {
 
     private final Firestore firestore;
@@ -52,6 +54,38 @@ public class FirebaseSyncService {
     private final ReglesGestionRepository reglesGestionRepository;
     private final HistoriqueSignalementsRepository historiqueSignalementsRepository;
     private final HistoriqueUsersRepository historiqueUsersRepository;
+
+    public Map<String, Long> getLocalCounts() {
+        Map<String, Long> counts = new HashMap<>();
+        counts.put("statuts_user", statutsUserRepository.count());
+        counts.put("user_type", userTypeRepository.count());
+        counts.put("regles_gestion", reglesGestionRepository.count());
+        counts.put("type_signalements", typeSignalementRepository.count());
+        counts.put("statuts", statutsRepository.count());
+        counts.put("entreprises", entrepriseRepository.count());
+        counts.put("points", pointRepository.count());
+        counts.put("users", userRepository.count());
+        counts.put("signalements", signalementsRepository.count());
+        counts.put("historique_signalements", historiqueSignalementsRepository.count());
+        counts.put("historique_users", historiqueUsersRepository.count());
+        return counts;
+    }
+
+    public Map<String, Long> getRemoteCounts() {
+        Map<String, Long> counts = new HashMap<>();
+        counts.put("statuts_user", countCollection("statuts_user"));
+        counts.put("user_type", countCollection("user_type"));
+        counts.put("regles_gestion", countCollection("regles_gestion"));
+        counts.put("type_signalements", countCollection("type_signalements"));
+        counts.put("statuts", countCollection("statuts"));
+        counts.put("entreprises", countCollection("entreprises"));
+        counts.put("points", countCollection("points"));
+        counts.put("users", countCollection("users"));
+        counts.put("signalements", countCollection("signalements"));
+        counts.put("historique_signalements", countCollection("historique_signalements"));
+        counts.put("historique_users", countCollection("historique_users"));
+        return counts;
+    }
 
     public void pushAllToFirebase() {
         WriteBatch batch = firestore.batch();
@@ -233,9 +267,9 @@ public class FirebaseSyncService {
     private void syncStatutsUser() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("statuts_user").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             StatutsUser existing = statutsUserRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -253,9 +287,9 @@ public class FirebaseSyncService {
     private void syncUserTypes() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("user_type").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             UserType existing = userTypeRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -273,9 +307,9 @@ public class FirebaseSyncService {
     private void syncReglesGestion() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("regles_gestion").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             ReglesGestion existing = reglesGestionRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -294,9 +328,9 @@ public class FirebaseSyncService {
     private void syncTypeSignalements() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("type_signalements").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             TypeSignalement existing = typeSignalementRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -314,9 +348,9 @@ public class FirebaseSyncService {
     private void syncStatuts() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("statuts").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             Statuts existing = statutsRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -334,9 +368,9 @@ public class FirebaseSyncService {
     private void syncEntreprises() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("entreprises").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             Entreprise existing = entrepriseRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -358,9 +392,9 @@ public class FirebaseSyncService {
     private void syncPoints() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("points").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             Point existing = pointRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -379,9 +413,9 @@ public class FirebaseSyncService {
     private void syncUsers() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("users").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             User existing = userRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -424,9 +458,9 @@ public class FirebaseSyncService {
     private void syncSignalements() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("signalements").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             Signalements existing = signalementsRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -481,9 +515,9 @@ public class FirebaseSyncService {
     private void syncHistoriqueSignalements() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("historique_signalements").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             HistoriqueSignalements existing = historiqueSignalementsRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -518,9 +552,9 @@ public class FirebaseSyncService {
     private void syncHistoriqueUsers() throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = firestore.collection("historique_users").get().get();
         for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            Long id = getLong(doc, "id");
+            Long id = resolveId(doc);
             if (id == null) {
-                id = Long.parseLong(doc.getId());
+                continue;
             }
             HistoriqueUsers existing = historiqueUsersRepository.findById(id).orElse(null);
             LocalDateTime remoteUpdatedAt = getDate(doc, "updated_at");
@@ -549,6 +583,29 @@ public class FirebaseSyncService {
 
             historique.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
             historiqueUsersRepository.save(historique);
+        }
+    }
+
+    private Long resolveId(DocumentSnapshot doc) {
+        Long id = getLong(doc, "id");
+        if (id != null) {
+            return id;
+        }
+        String docId = doc.getId();
+        try {
+            return Long.parseLong(docId);
+        } catch (NumberFormatException ex) {
+            log.warn("Skipping document with non-numeric id: {}", docId);
+            return null;
+        }
+    }
+
+    private long countCollection(String name) {
+        try {
+            return firestore.collection(name).get().get().size();
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+            return 0L;
         }
     }
 
