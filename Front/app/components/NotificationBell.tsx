@@ -5,7 +5,7 @@ import { getFirestoreSignalements } from "~/lib/firestore-data";
 
 export function NotificationBell() {
   const [hasNotif, setHasNotif] = useState(false);
-  const [changedSignalement, setChangedSignalement] = useState<any | null>(null);
+  const [changedSignalements, setChangedSignalements] = useState<any[]>([]);
   const [showPopup, setShowPopup] = useState(false);
   const [prevSignalements, setPrevSignalements] = useState<any[]>([]);
 
@@ -17,14 +17,23 @@ export function NotificationBell() {
         setPrevSignalements(signalements);
         return;
       }
-      // Compare chaque signalement par id et statut
-      for (let i = 0; i < signalements.length; i++) {
-        const prev = prevSignalements.find(s => s.id === signalements[i].id);
-        if (prev && prev.statut !== signalements[i].statut) {
-          setHasNotif(true);
-          setChangedSignalement(signalements[i]);
-          break;
-        }
+      // Trouver tous les signalements dont le statut a changé
+      const modifs = signalements.filter(sig => {
+        const prev = prevSignalements.find(s => s.id === sig.id);
+        return prev && prev.statut !== sig.statut;
+      });
+      if (modifs.length > 0) {
+        setHasNotif(true);
+        setChangedSignalements(prevList => {
+          // Ajoute les nouveaux signalements modifiés qui ne sont pas déjà dans la liste
+          const newList = [...prevList];
+          modifs.forEach(sig => {
+            if (!newList.find(s => s.id === sig.id && s.statut === sig.statut)) {
+              newList.push(sig);
+            }
+          });
+          return newList;
+        });
       }
       setPrevSignalements(signalements);
     }
@@ -40,6 +49,12 @@ export function NotificationBell() {
     if (hasNotif) setShowPopup((v) => !v);
   };
 
+  const handleClose = () => {
+    setShowPopup(false);
+    setHasNotif(false);
+    setChangedSignalements([]);
+  };
+
   return (
     <div className="fixed top-4 right-6 z-50">
       <div className="relative">
@@ -47,16 +62,20 @@ export function NotificationBell() {
         {hasNotif && (
           <span className="absolute top-0 right-0 block h-3 w-3 rounded-full bg-red-500 border-2 border-white" />
         )}
-        {showPopup && changedSignalement && (
-          <div className="absolute right-0 mt-2 w-72 bg-white border rounded-lg shadow-lg p-4 z-50">
-            <div className="font-bold mb-2">Signalement modifié</div>
-            <div className="text-sm mb-1">ID : {changedSignalement.id}</div>
-            <div className="text-sm mb-1">Type : <b>{changedSignalement.typeSignalement}</b></div>
-            <div className="text-sm mb-1">Statut : <b>{changedSignalement.statut}</b></div>
-            {changedSignalement.description && (
-              <div className="text-xs text-gray-600 mb-1">{changedSignalement.description}</div>
-            )}
-            <button className="mt-3 px-3 py-1 bg-blue-500 text-white rounded" onClick={() => setShowPopup(false)}>Fermer</button>
+        {showPopup && changedSignalements.length > 0 && (
+          <div className="absolute right-0 mt-2 w-80 bg-white border rounded-lg shadow-lg p-4 z-50 max-h-96 overflow-y-auto">
+            <div className="font-bold mb-2">Signalements modifiés ({changedSignalements.length})</div>
+            {changedSignalements.map(sig => (
+              <div key={sig.id} className="mb-3 border-b pb-2 last:border-b-0 last:pb-0">
+                <div className="text-sm mb-1">ID : {sig.id}</div>
+                <div className="text-sm mb-1">Type : <b>{sig.typeSignalement}</b></div>
+                <div className="text-sm mb-1">Statut : <b>{sig.statut}</b></div>
+                {sig.description && (
+                  <div className="text-xs text-gray-600 mb-1">{sig.description}</div>
+                )}
+              </div>
+            ))}
+            <button className="mt-3 px-3 py-1 bg-blue-500 text-white rounded" onClick={handleClose}>Fermer</button>
           </div>
         )}
       </div>
