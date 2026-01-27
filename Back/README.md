@@ -27,7 +27,7 @@ mvn clean install
 mvn spring-boot:run
 ```
 
-L'API sera disponible sur `http://localhost:8080/api`
+L'API sera disponible sur `http://localhost:8083/api`
 
 ## Endpoints disponibles
 
@@ -39,6 +39,6 @@ L'API sera disponible sur `http://localhost:8080/api`
 ## Configuration
 
 Les paramètres sont définis dans `application.yml`:
-- Port: 8080
+- Port: 8083
 - Base de données: H2 (en mémoire)
 - Secret JWT: À modifier en production

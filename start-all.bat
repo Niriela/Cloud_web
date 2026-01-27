@@ -12,7 +12,7 @@ start "Frontend" cmd /c "cd /d d:\ITU_S5\WEB\Cloud_web\Front && npm start"
 
 echo.
 echo Applications demarrees !
-echo - Backend: http://localhost:8080/api
+echo - Backend: http://localhost:8083/api
 echo - Frontend: http://localhost:3000
 echo.
 pause

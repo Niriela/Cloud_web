@@ -1958,7 +1958,7 @@ instanceKlass  @bci org/eclipse/core/internal/preferences/EclipsePreferences abs
 # instanceKlass java/lang/invoke/LambdaForm$MH+0x0000753630081400
 # instanceKlass java/lang/invoke/LambdaForm$MH+0x0000753630081000
 instanceKlass  @bci org/eclipse/core/internal/preferences/EclipsePreferences absolutePath ()Ljava/lang/String; 66 <appendix> argL1 form vmentry <vmtarget> ; # java/lang/invoke/LambdaForm$MH+0x0000753630080c00
-# instanceKlass java/lang/invoke/LambdaForm$MH+0x0000753630080800
+# instanceKlass java/lang/invoke/LambdaForm$MH+0x0000753630080830
 # instanceKlass java/lang/invoke/LambdaForm$MH+0x0000753630080400
 # instanceKlass java/lang/invoke/LambdaForm$MH+0x0000753630080000
 instanceKlass java/io/RandomAccessFile$1

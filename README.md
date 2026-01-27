@@ -19,7 +19,7 @@ mvn clean install
 mvn spring-boot:run
 ```
 
-L'API sera disponible sur `http://localhost:8080/api`
+L'API sera disponible sur `http://localhost:8083/api`
 
 ### Frontend (React)
 
@@ -84,7 +84,7 @@ Cloud_web/
 ### Frontend (.env)
 
 ```
-REACT_APP_API_URL=http://localhost:8080/api
+REACT_APP_API_URL=http://localhost:8083/api
 ```
 
 ## 📚 API Endpoints
@@ -106,7 +106,7 @@ REACT_APP_API_URL=http://localhost:8080/api
 Le projet utilise :
 - **Maven** pour la gestion des dépendances Java
 - **npm** pour la gestion des dépendances React
-- **H2 Console** accessible sur `http://localhost:8080/api/h2-console`
+- **H2 Console** accessible sur `http://localhost:8083/api/h2-console`
 
 ## 🔄 Flux d'authentification
 

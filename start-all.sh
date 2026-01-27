@@ -17,7 +17,7 @@ FRONT_PID=$!
 
 echo
 echo "Applications démarrées !"
-echo "- Backend  : http://localhost:8080/api"
+echo "- Backend  : http://localhost:8083/api"
 echo "- Frontend : http://localhost:3000"
 echo
 echo "Backend PID  : $BACK_PID"

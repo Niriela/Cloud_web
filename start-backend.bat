@@ -21,7 +21,7 @@ if %ERRORLEVEL% EQU 0 (
     echo ==========================================
     echo.
     echo Demarrage de l'application...
-    echo API sera disponible sur: http://localhost:8080/api
+    echo API sera disponible sur: http://localhost:8083/api
     echo.
     java -jar target\cloud-web-api-1.0.0.jar
 ) else (
