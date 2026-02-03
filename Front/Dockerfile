@@ -1,22 +1,40 @@
-FROM node:20-alpine AS development-dependencies-env
-COPY . /app
-WORKDIR /app
-RUN npm ci
+# Front/Dockerfile - Version simplifiée et efficace
+FROM node:20-alpine AS builder
 
-FROM node:20-alpine AS production-dependencies-env
-COPY ./package.json package-lock.json /app/
 WORKDIR /app
-RUN npm ci --omit=dev
 
-FROM node:20-alpine AS build-env
-COPY . /app/
-COPY --from=development-dependencies-env /app/node_modules /app/node_modules
-WORKDIR /app
-RUN npm run build
+# 1. Copier package.json pour le cache
+COPY package.json package-lock.json ./
 
-FROM node:20-alpine
-COPY ./package.json package-lock.json /app/
-COPY --from=production-dependencies-env /app/node_modules /app/node_modules
-COPY --from=build-env /app/build /app/build
-WORKDIR /app
-CMD ["npm", "run", "start"]
+# 2. Installer toutes les dépendances (production + dev)
+RUN npm install --frozen-lockfile
+
+# 3. Copier tout le code source
+COPY . .
+
+# 4. Définir les variables d'environnement pour Vite
+ARG VITE_API_URL=http://backend:8080/api
+ARG VITE_APP_NAME=CloudWeb
+ARG VITE_APP_VERSION=1.0.0
+
+# 5. Builder avec ces variables
+RUN VITE_API_URL=${VITE_API_URL} \
+    VITE_APP_NAME=${VITE_APP_NAME} \
+    VITE_APP_VERSION=${VITE_APP_VERSION} \
+    npm run build
+
+# Vérification
+RUN ls -la /app/build/client/ && \
+    echo "Fichiers générés:" && \
+    find /app/build/client/ -name "*.js" | head -5
+
+# Production
+FROM nginx:alpine
+
+RUN rm -rf /usr/share/nginx/html/*
+
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/build/client/. /usr/share/nginx/html/
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
