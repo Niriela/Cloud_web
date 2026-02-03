@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getEntreprises,
   getSignalements,
@@ -12,7 +12,6 @@ import {
 } from "~/lib/api";
 import {
   getFirestoreEntreprises,
-  getFirestoreSignalements,
   getFirestoreStatuts,
   getFirestoreTypeSignalements,
   mapFirestoreSignalementsRaw,
@@ -27,7 +26,13 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { collection, getFirestore, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  getFirestore,
+  onSnapshot,
+  query,
+  limit,
+} from "firebase/firestore";
 import { firebaseAuth } from "~/lib/firebase";
 
 type Draft = {
@@ -37,6 +42,8 @@ type Draft = {
   entrepriseId: string;
   typeSignalementId: string;
 };
+
+const FIRESTORE_SIGNAL_LIMIT = 200;
 
 const buildDrafts = (items: SignalementMapDto[]) =>
   items.reduce<Record<number, Draft>>((acc, item) => {
@@ -77,8 +84,7 @@ const withLookups = (
     entrepriseId:
       item.entreprise && entreprises.length
         ? entreprises.find(
-            (e) =>
-              normalizeLabel(e.name) === normalizeLabel(item.entreprise),
+            (e) => normalizeLabel(e.name) === normalizeLabel(item.entreprise),
           )?.id ?? null
         : item.entrepriseId,
   }));
@@ -94,72 +100,100 @@ export default function ManagerView() {
   const [error, setError] = useState<string | null>(null);
   const [isFirestoreSource, setIsFirestoreSource] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    setIsLoading(true);
-    const load = async () => {
-      if (typeof navigator !== "undefined" && navigator.onLine) {
-        try {
-          const [signalementsData, statutsData, entreprisesData, typesData] =
-            await Promise.all([
-              getFirestoreSignalements(),
-              getFirestoreStatuts(),
-              getFirestoreEntreprises(),
-              getFirestoreTypeSignalements(),
-            ])
-          if (signalementsData.length > 0) {
-            return {
-              source: "firestore",
-              signalementsData,
-              statutsData,
-              entreprisesData,
-              typesData,
-            }
-          }
-        } catch {
-          // fall back to API if Firestore fails
-        }
-      }
+  // Pour éviter que onSnapshot se réabonne à cause des deps
+  const lookupsRef = useRef({
+    statuts: [] as Statut[],
+    entreprises: [] as Entreprise[],
+    types: [] as TypeSignalement[],
+  });
 
+  useEffect(() => {
+    lookupsRef.current = { statuts, entreprises, types };
+  }, [statuts, entreprises, types]);
+
+  const fallbackToApi = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
       const [signalementsData, statutsData, entreprisesData, typesData] =
         await Promise.all([
           getSignalements(),
           getStatuts(),
           getEntreprises(),
           getTypeSignalements(),
-        ])
+        ]);
 
-      return {
-        source: "api",
+      const normalized = withLookups(
         signalementsData,
         statutsData,
         entreprisesData,
         typesData,
-      }
+      );
+
+      setSignalements(normalized);
+      setStatuts(statutsData);
+      setEntreprises(entreprisesData);
+      setTypes(typesData);
+      setDrafts(buildDrafts(normalized));
+      setIsFirestoreSource(false);
+    } catch {
+      setError("Impossible de charger les données manager.");
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  // Chargement initial
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setError(null);
+
+    const load = async () => {
+      const online =
+        typeof navigator !== "undefined" ? navigator.onLine : true;
+
+      // On essaie Firestore (mais uniquement pour les lookups, PAS les signalements)
+      if (online) {
+        try {
+          const [statutsData, entreprisesData, typesData] = await Promise.all([
+            getFirestoreStatuts(),
+            getFirestoreEntreprises(),
+            getFirestoreTypeSignalements(),
+          ]);
+
+          return {
+            source: "firestore" as const,
+            statutsData,
+            entreprisesData,
+            typesData,
+          };
+        } catch {
+          // ignore -> fallback API
+        }
+      }
+
+      return { source: "api" as const };
+    };
 
     load()
-      .then(
-        ({
-          source,
-          signalementsData,
-          statutsData,
-          entreprisesData,
-          typesData,
-        }) => {
+      .then(async (result) => {
         if (!active) return;
-        const normalized = withLookups(
-          signalementsData,
-          statutsData,
-          entreprisesData,
-          typesData,
-        );
-        setSignalements(normalized);
-        setStatuts(statutsData);
-        setEntreprises(entreprisesData);
-        setTypes(typesData);
-        setDrafts(buildDrafts(normalized));
-        setIsFirestoreSource(source === "firestore");
+
+        if (result.source === "firestore") {
+          setStatuts(result.statutsData);
+          setEntreprises(result.entreprisesData);
+          setTypes(result.typesData);
+          setIsFirestoreSource(true);
+
+          // On laisse onSnapshot charger signalements (pas de double lecture)
+          setSignalements([]);
+          setDrafts({});
+          return;
+        }
+
+        // API fallback
+        await fallbackToApi();
       })
       .catch(() => {
         if (!active) return;
@@ -173,19 +207,37 @@ export default function ManagerView() {
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Listener Firestore (limité + sans re-subscribe)
   useEffect(() => {
-    if (!isFirestoreSource || !navigator.onLine) {
-      return;
-    }
+    const online =
+      typeof navigator !== "undefined" ? navigator.onLine : true;
+
+    if (!isFirestoreSource || !online) return;
 
     const db = getFirestore(firebaseAuth.app);
-    const unsubscribe = onSnapshot(
+
+    // IMPORTANT: limiter sinon tu lis toute la collection
+    // Optionnel: si tu as un champ "updatedAt" ou "createdAt", tu peux ajouter orderBy.
+    // Exemple:
+    // const q = query(collection(db, "signalements"), orderBy("updatedAt", "desc"), limit(FIRESTORE_SIGNAL_LIMIT));
+    const q = query(
       collection(db, "signalements"),
+      limit(FIRESTORE_SIGNAL_LIMIT),
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
       (snapshot) => {
         try {
+          const { statuts, entreprises, types } = lookupsRef.current;
+
+          // Si ton mapping a besoin de l'id Firestore, remplace par:
+          // snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
           const raw = snapshot.docs.map((doc) => doc.data());
+
           const mapped = mapFirestoreSignalementsRaw(
             raw,
             statuts,
@@ -193,25 +245,30 @@ export default function ManagerView() {
             types,
           );
           const normalized = withLookups(mapped, statuts, entreprises, types);
+
           setSignalements(normalized);
           setDrafts(buildDrafts(normalized));
         } catch {
           setError("Impossible de charger les données manager.");
         }
       },
-      () => {
+      async (err: any) => {
+        // Quota dépassé -> on bascule sur API automatiquement
+        if (err?.code === "resource-exhausted") {
+          setError("Quota Firestore dépassé. Passage en mode API.");
+          setIsFirestoreSource(false);
+          await fallbackToApi();
+          return;
+        }
         setError("Impossible de charger les données manager.");
       },
     );
 
     return () => unsubscribe();
-  }, [isFirestoreSource, statuts, entreprises, types]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFirestoreSource]);
 
-  const handleDraftChange = (
-    id: number,
-    key: keyof Draft,
-    value: string,
-  ) => {
+  const handleDraftChange = (id: number, key: keyof Draft, value: string) => {
     setDrafts((prev) => ({
       ...prev,
       [id]: {
@@ -224,8 +281,10 @@ export default function ManagerView() {
   const handleSave = async (id: number) => {
     const draft = drafts[id];
     if (!draft) return;
+
     setSavingId(id);
     setError(null);
+
     try {
       const updated = isFirestoreSource
         ? await updateFirestoreSignalement(id, {
@@ -253,6 +312,9 @@ export default function ManagerView() {
             entrepriseId: numberOrNull(draft.entrepriseId),
             typeSignalementId: numberOrNull(draft.typeSignalementId),
           });
+
+      // Si Firestore est la source, le listener mettra à jour aussi,
+      // mais on garde ceci pour un retour immédiat UI.
       setSignalements((prev) =>
         prev.map((item) => (item.id === id ? updated : item)),
       );
@@ -279,6 +341,7 @@ export default function ManagerView() {
       </CardHeader>
       <CardContent>
         {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
+
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Chargement...</p>
         ) : (
@@ -296,12 +359,14 @@ export default function ManagerView() {
                   <th className="px-3 py-2 text-right">Action</th>
                 </tr>
               </thead>
+
               <tbody>
                 {rows.map((item) => {
                   const draft = drafts[item.id];
                   return (
                     <tr key={item.id} className="border-b last:border-0">
                       <td className="px-3 py-2">{item.id}</td>
+
                       <td className="px-3 py-2">
                         <select
                           className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs"
@@ -322,6 +387,7 @@ export default function ManagerView() {
                           ))}
                         </select>
                       </td>
+
                       <td className="px-3 py-2">
                         <span
                           className="block max-w-[240px] truncate"
@@ -330,6 +396,7 @@ export default function ManagerView() {
                           {item.description ?? "-"}
                         </span>
                       </td>
+
                       <td className="px-3 py-2">
                         <select
                           className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs"
@@ -350,6 +417,7 @@ export default function ManagerView() {
                           ))}
                         </select>
                       </td>
+
                       <td className="px-3 py-2">
                         <input
                           className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs"
@@ -366,6 +434,7 @@ export default function ManagerView() {
                           }
                         />
                       </td>
+
                       <td className="px-3 py-2">
                         <input
                           className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs"
@@ -382,6 +451,7 @@ export default function ManagerView() {
                           }
                         />
                       </td>
+
                       <td className="px-3 py-2">
                         <select
                           className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs"
@@ -402,6 +472,7 @@ export default function ManagerView() {
                           ))}
                         </select>
                       </td>
+
                       <td className="px-3 py-2 text-right">
                         <Button
                           size="sm"
@@ -415,6 +486,7 @@ export default function ManagerView() {
                     </tr>
                   );
                 })}
+
                 {rows.length === 0 ? (
                   <tr>
                     <td
