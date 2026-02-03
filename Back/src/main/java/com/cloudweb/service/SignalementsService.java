@@ -13,6 +13,7 @@ import com.cloudweb.repository.SignalementsRepository;
 import com.cloudweb.repository.StatutsRepository;
 import com.cloudweb.repository.TypeSignalementRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import com.cloudweb.service.FirebaseSyncService;
 
@@ -21,6 +22,7 @@ import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SignalementsService {
 
     private final SignalementsRepository signalementsRepository;
@@ -98,6 +100,17 @@ public class SignalementsService {
         Signalements saved = signalementsRepository.save(signalement);
         firebaseSyncService.refreshAsync();
         return toMapDto(saved);
+    }
+
+    public void deleteSignalement(Long id) {
+        Signalements signalement = signalementsRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Signalement not found"));
+        signalementsRepository.delete(signalement);
+        try {
+            firebaseSyncService.deleteSignalementFromFirestore(signalement);
+        } catch (RuntimeException ex) {
+            log.warn("Firestore delete skipped: {}", ex.getMessage());
+        }
     }
 
     private SignalementMapDto toMapDto(Signalements signalement) {

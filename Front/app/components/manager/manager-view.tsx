@@ -4,6 +4,7 @@ import {
   getSignalements,
   getStatuts,
   getTypeSignalements,
+  deleteSignalement,
   updateSignalement,
   type Entreprise,
   type SignalementMapDto,
@@ -91,6 +92,7 @@ export default function ManagerView() {
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isFirestoreSource, setIsFirestoreSource] = useState(false);
 
@@ -267,6 +269,24 @@ export default function ManagerView() {
     }
   };
 
+  const handleDelete = async (id: number) => {
+    setDeletingId(id);
+    setError(null);
+    try {
+      await deleteSignalement(id);
+      setSignalements((prev) => prev.filter((item) => item.id !== id));
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } catch {
+      setError("Impossible de supprimer le signalement.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const rows = useMemo(() => signalements, [signalements]);
 
   return (
@@ -293,7 +313,7 @@ export default function ManagerView() {
                   <th className="px-3 py-2 text-left">Surface (m²)</th>
                   <th className="px-3 py-2 text-left">Budget</th>
                   <th className="px-3 py-2 text-left">Entreprise</th>
-                  <th className="px-3 py-2 text-right">Action</th>
+                  <th className="px-3 py-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -403,14 +423,25 @@ export default function ManagerView() {
                         </select>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Button
-                          size="sm"
-                          type="button"
-                          disabled={savingId === item.id}
-                          onClick={() => handleSave(item.id)}
-                        >
-                          {savingId === item.id ? "Sauvegarde..." : "Sauvegarder"}
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            type="button"
+                            disabled={savingId === item.id || deletingId === item.id}
+                            onClick={() => handleSave(item.id)}
+                          >
+                            {savingId === item.id ? "Sauvegarde..." : "Sauvegarder"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            type="button"
+                            variant="destructive"
+                            disabled={savingId === item.id || deletingId === item.id}
+                            onClick={() => handleDelete(item.id)}
+                          >
+                            {deletingId === item.id ? "Suppression..." : "Supprimer"}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

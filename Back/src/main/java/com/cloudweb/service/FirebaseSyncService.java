@@ -270,6 +270,32 @@ public class FirebaseSyncService {
         }
     }
 
+    @org.springframework.scheduling.annotation.Async
+    public void deleteSignalementFromFirestore(Signalements signalement) {
+        if (signalement == null) {
+            return;
+        }
+        WriteBatch batch = firestore.batch();
+        boolean deleted = deleteRemoteById("signalements", signalement.getId(), batch);
+        if (!deleted) {
+            deleteRemoteSignalementByNaturalKey(
+                    signalement.getPoint() != null ? signalement.getPoint().getId() : null,
+                    signalement.getTypeSignalement() != null ? signalement.getTypeSignalement().getId() : null,
+                    signalement.getDate() != null ? signalement.getDate().toString() : null,
+                    signalement.getUser() != null ? signalement.getUser().getId() : null,
+                    batch
+            );
+        }
+        try {
+            batch.commit().get();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            log.warn("Firebase delete interrupted", ex);
+        } catch (ExecutionException ex) {
+            log.warn("Firebase delete failed", ex);
+        }
+    }
+
     public void pullAllFromFirebase() {
         try {
             syncStatutsUser();
@@ -1008,6 +1034,70 @@ public class FirebaseSyncService {
         } catch (InterruptedException | ExecutionException ex) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private boolean deleteRemoteById(String collection, Long id, WriteBatch batch) {
+        if (id == null) {
+            return false;
+        }
+        boolean deleted = false;
+        try {
+            QuerySnapshot snapshot = firestore.collection(collection)
+                    .whereEqualTo("id", id)
+                    .get()
+                    .get();
+            deleted = deleteAllDocs(snapshot, batch) || deleted;
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            QuerySnapshot snapshot = firestore.collection(collection)
+                    .whereEqualTo("id", String.valueOf(id))
+                    .get()
+                    .get();
+            deleted = deleteAllDocs(snapshot, batch) || deleted;
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+        }
+        return deleted;
+    }
+
+    private boolean deleteRemoteSignalementByNaturalKey(
+            Long pointId,
+            Long typeId,
+            String date,
+            Long userId,
+            WriteBatch batch
+    ) {
+        if (pointId == null || typeId == null || date == null) {
+            return false;
+        }
+        try {
+            var query = firestore.collection("signalements")
+                    .whereEqualTo("point_id", pointId)
+                    .whereEqualTo("type_signalement_id", typeId)
+                    .whereEqualTo("date", date);
+            if (userId != null) {
+                query = query.whereEqualTo("user_id", userId);
+            }
+            QuerySnapshot snapshot = query.get().get();
+            return deleteAllDocs(snapshot, batch);
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+        }
+        return false;
+    }
+
+    private boolean deleteAllDocs(QuerySnapshot snapshot, WriteBatch batch) {
+        if (snapshot == null) {
+            return false;
+        }
+        boolean deleted = false;
+        for (DocumentSnapshot doc : snapshot.getDocuments()) {
+            batch.delete(doc.getReference());
+            deleted = true;
+        }
+        return deleted;
     }
 
     private String coordinateKey(Double latitude, Double longitude) {

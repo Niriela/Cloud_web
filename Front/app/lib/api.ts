@@ -183,6 +183,12 @@ export function updateSignalement(
   });
 }
 
+export function deleteSignalement(id: number) {
+  return apiRequest<void>(`/api/signalements/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export function getUsers() {
   return apiRequest<UserAdmin[]>("/api/users");
 }
