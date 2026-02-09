@@ -4,7 +4,9 @@ type ApiError = {
 };
 
 const API_BASE =
-  import.meta.env.VITE_API_BASE?.replace(/\/$/, "") ?? "http://localhost:8080";
+  import.meta.env.VITE_API_BASE?.replace(/\/$/, "") ??
+  import.meta.env.VITE_API_URL?.replace(/\/$/, "") ??
+  "http://localhost:8080";
 
 async function apiRequest<T>(
   path: string,
@@ -118,6 +120,13 @@ export function getAuthSession() {
   });
 }
 
+export function login(payload: LoginPayload) {
+  return apiRequest<AuthResponse>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function loginOffline(payload: LoginPayload) {
   return apiRequest<AuthResponse>("/api/auth/offline/login", {
     method: "POST",
@@ -180,6 +189,12 @@ export function updateSignalement(
   return apiRequest<SignalementMapDto>(`/api/signalements/${id}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
+  });
+}
+
+export function deleteSignalement(id: number) {
+  return apiRequest<void>(`/api/signalements/${id}`, {
+    method: "DELETE",
   });
 }
 

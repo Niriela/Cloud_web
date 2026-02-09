@@ -1,2 +1,4 @@
 /Front/node_modules
 /Back/target
+/secrets/
+*firebase-adminsdk*.json

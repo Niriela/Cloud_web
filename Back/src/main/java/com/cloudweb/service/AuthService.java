@@ -11,9 +11,6 @@ import com.cloudweb.repository.ReglesGestionRepository;
 import com.cloudweb.repository.StatutsUserRepository;
 import com.cloudweb.repository.UserTypeRepository;
 import com.cloudweb.repository.UserRepository;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseAuthException;
-import com.google.firebase.auth.UserRecord;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,7 +23,6 @@ public class AuthService {
     private final ReglesGestionRepository reglesGestionRepository;
     private final StatutsUserRepository statutsUserRepository;
     private final UserTypeRepository userTypeRepository;
-    private final FirebaseSyncService firebaseSyncService;
     private final PasswordEncoder passwordEncoder;
     public AuthResponse loginWithFirebase(String firebaseUid, String email, String idToken) {
         User user = resolveUserByFirebase(firebaseUid, email);
@@ -92,23 +88,19 @@ public class AuthService {
             throw new RuntimeException("Email already exists");
         }
 
-        String firebaseUid = createFirebaseUser(registerRequest);
         StatutsUser actif = statutsUserRepository.findByLibelle("Actif").orElse(null);
         UserType utilisateur = userTypeRepository.findByLibelle("Utilisateur").orElse(null);
 
         User user = User.builder()
                 .email(registerRequest.getEmail())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
-                .firebaseId(firebaseUid)
                 .firstName(registerRequest.getFirstName())
                 .lastName(registerRequest.getLastName())
                 .statutsUser(actif)
                 .userType(utilisateur)
                 .build();
 
-        User saved = userRepository.save(user);
-        firebaseSyncService.refreshAsync();
-        return saved;
+        return userRepository.save(user);
     }
 
     public User resolveUserByFirebase(String firebaseUid, String email) {
@@ -134,19 +126,6 @@ public class AuthService {
         }
         byEmail.setFirebaseId(firebaseUid);
         return userRepository.save(byEmail);
-    }
-
-    private String createFirebaseUser(RegisterRequest registerRequest) {
-        UserRecord.CreateRequest request = new UserRecord.CreateRequest()
-                .setEmail(registerRequest.getEmail())
-                .setPassword(registerRequest.getPassword())
-                .setDisplayName(registerRequest.getFirstName() + " " + registerRequest.getLastName());
-        try {
-            UserRecord record = FirebaseAuth.getInstance().createUser(request);
-            return record.getUid();
-        } catch (FirebaseAuthException ex) {
-            throw new RuntimeException("Firebase user creation failed: " + ex.getMessage(), ex);
-        }
     }
 
     private boolean isBlocked(User user) {
@@ -178,14 +157,12 @@ public class AuthService {
         }
 
         userRepository.save(user);
-        firebaseSyncService.refreshAsync();
     }
 
     private void resetFailedAttempts(User user) {
         if (user.getFailedLoginAttempts() != null && user.getFailedLoginAttempts() > 0) {
             user.setFailedLoginAttempts(0);
             userRepository.save(user);
-            firebaseSyncService.refreshAsync();
         }
     }
 
@@ -261,6 +238,5 @@ public class AuthService {
         }
         user.setFailedLoginAttempts(0);
         userRepository.save(user);
-        firebaseSyncService.refreshAsync();
     }
 }

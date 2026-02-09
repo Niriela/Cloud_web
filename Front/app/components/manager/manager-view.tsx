@@ -4,21 +4,13 @@ import {
   getSignalements,
   getStatuts,
   getTypeSignalements,
+  deleteSignalement,
   updateSignalement,
   type Entreprise,
   type SignalementMapDto,
   type Statut,
   type TypeSignalement,
 } from "~/lib/api";
-import {
-  getFirestoreEntreprises,
-  getFirestoreSignalements,
-  getFirestoreStatuts,
-  getFirestoreTypeSignalements,
-  mapFirestoreSignalementsRaw,
-  normalizeLabel,
-  updateFirestoreSignalement,
-} from "~/lib/firestore-data";
 import {
   Card,
   CardContent,
@@ -27,8 +19,6 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { collection, getFirestore, onSnapshot } from "firebase/firestore";
-import { firebaseAuth } from "~/lib/firebase";
 
 type Draft = {
   surface: string;
@@ -52,6 +42,13 @@ const buildDrafts = (items: SignalementMapDto[]) =>
 
 const numberOrNull = (value: string) =>
   value.trim() === "" ? null : Number(value);
+
+const normalizeLabel = (value?: string | null) =>
+  (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
 const withLookups = (
   items: SignalementMapDto[],
@@ -91,62 +88,19 @@ export default function ManagerView() {
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isFirestoreSource, setIsFirestoreSource] = useState(false);
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
-    const load = async () => {
-      if (typeof navigator !== "undefined" && navigator.onLine) {
-        try {
-          const [signalementsData, statutsData, entreprisesData, typesData] =
-            await Promise.all([
-              getFirestoreSignalements(),
-              getFirestoreStatuts(),
-              getFirestoreEntreprises(),
-              getFirestoreTypeSignalements(),
-            ])
-          if (signalementsData.length > 0) {
-            return {
-              source: "firestore",
-              signalementsData,
-              statutsData,
-              entreprisesData,
-              typesData,
-            }
-          }
-        } catch {
-          // fall back to API if Firestore fails
-        }
-      }
-
-      const [signalementsData, statutsData, entreprisesData, typesData] =
-        await Promise.all([
-          getSignalements(),
-          getStatuts(),
-          getEntreprises(),
-          getTypeSignalements(),
-        ])
-
-      return {
-        source: "api",
-        signalementsData,
-        statutsData,
-        entreprisesData,
-        typesData,
-      }
-    }
-
-    load()
-      .then(
-        ({
-          source,
-          signalementsData,
-          statutsData,
-          entreprisesData,
-          typesData,
-        }) => {
+    Promise.all([
+      getSignalements(),
+      getStatuts(),
+      getEntreprises(),
+      getTypeSignalements(),
+    ])
+      .then(([signalementsData, statutsData, entreprisesData, typesData]) => {
         if (!active) return;
         const normalized = withLookups(
           signalementsData,
@@ -159,7 +113,6 @@ export default function ManagerView() {
         setEntreprises(entreprisesData);
         setTypes(typesData);
         setDrafts(buildDrafts(normalized));
-        setIsFirestoreSource(source === "firestore");
       })
       .catch(() => {
         if (!active) return;
@@ -174,38 +127,6 @@ export default function ManagerView() {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!isFirestoreSource || !navigator.onLine) {
-      return;
-    }
-
-    const db = getFirestore(firebaseAuth.app);
-    const unsubscribe = onSnapshot(
-      collection(db, "signalements"),
-      (snapshot) => {
-        try {
-          const raw = snapshot.docs.map((doc) => doc.data());
-          const mapped = mapFirestoreSignalementsRaw(
-            raw,
-            statuts,
-            entreprises,
-            types,
-          );
-          const normalized = withLookups(mapped, statuts, entreprises, types);
-          setSignalements(normalized);
-          setDrafts(buildDrafts(normalized));
-        } catch {
-          setError("Impossible de charger les données manager.");
-        }
-      },
-      () => {
-        setError("Impossible de charger les données manager.");
-      },
-    );
-
-    return () => unsubscribe();
-  }, [isFirestoreSource, statuts, entreprises, types]);
 
   const handleDraftChange = (
     id: number,
@@ -227,32 +148,13 @@ export default function ManagerView() {
     setSavingId(id);
     setError(null);
     try {
-      const updated = isFirestoreSource
-        ? await updateFirestoreSignalement(id, {
-            surface: numberOrNull(draft.surface),
-            budget: numberOrNull(draft.budget),
-            statutsId: numberOrNull(draft.statutsId),
-            typeSignalementId: numberOrNull(draft.typeSignalementId),
-            entrepriseId: numberOrNull(draft.entrepriseId),
-            statutsLabel:
-              statuts.find((item) => item.id === numberOrNull(draft.statutsId))
-                ?.libelle ?? null,
-            typeLabel:
-              types.find(
-                (item) => item.id === numberOrNull(draft.typeSignalementId),
-              )?.libelle ?? null,
-            entrepriseLabel:
-              entreprises.find(
-                (item) => item.id === numberOrNull(draft.entrepriseId),
-              )?.name ?? null,
-          })
-        : await updateSignalement(id, {
-            surface: numberOrNull(draft.surface),
-            budget: numberOrNull(draft.budget),
-            statutsId: numberOrNull(draft.statutsId),
-            entrepriseId: numberOrNull(draft.entrepriseId),
-            typeSignalementId: numberOrNull(draft.typeSignalementId),
-          });
+      const updated = await updateSignalement(id, {
+        surface: numberOrNull(draft.surface),
+        budget: numberOrNull(draft.budget),
+        statutsId: numberOrNull(draft.statutsId),
+        entrepriseId: numberOrNull(draft.entrepriseId),
+        typeSignalementId: numberOrNull(draft.typeSignalementId),
+      });
       setSignalements((prev) =>
         prev.map((item) => (item.id === id ? updated : item)),
       );
@@ -264,6 +166,24 @@ export default function ManagerView() {
       setError("Impossible de sauvegarder le signalement.");
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    setDeletingId(id);
+    setError(null);
+    try {
+      await deleteSignalement(id);
+      setSignalements((prev) => prev.filter((item) => item.id !== id));
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } catch {
+      setError("Impossible de supprimer le signalement.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -293,7 +213,7 @@ export default function ManagerView() {
                   <th className="px-3 py-2 text-left">Surface (m²)</th>
                   <th className="px-3 py-2 text-left">Budget</th>
                   <th className="px-3 py-2 text-left">Entreprise</th>
-                  <th className="px-3 py-2 text-right">Action</th>
+                  <th className="px-3 py-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -403,14 +323,25 @@ export default function ManagerView() {
                         </select>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Button
-                          size="sm"
-                          type="button"
-                          disabled={savingId === item.id}
-                          onClick={() => handleSave(item.id)}
-                        >
-                          {savingId === item.id ? "Sauvegarde..." : "Sauvegarder"}
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            type="button"
+                            disabled={savingId === item.id || deletingId === item.id}
+                            onClick={() => handleSave(item.id)}
+                          >
+                            {savingId === item.id ? "Sauvegarde..." : "Sauvegarder"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            type="button"
+                            variant="destructive"
+                            disabled={savingId === item.id || deletingId === item.id}
+                            onClick={() => handleDelete(item.id)}
+                          >
+                            {deletingId === item.id ? "Suppression..." : "Supprimer"}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

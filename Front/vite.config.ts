@@ -23,7 +23,8 @@ export default defineConfig({
   },
   // Pour les variables d'environnement avec Vite
   define: {
-    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'http://localhost:8080/api'),
+    'import.meta.env.VITE_API_BASE': JSON.stringify(process.env.VITE_API_BASE || process.env.VITE_API_URL || 'http://localhost:8080'),
+    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || process.env.VITE_API_BASE || 'http://localhost:8080'),
     'import.meta.env.VITE_APP_NAME': JSON.stringify(process.env.VITE_APP_NAME || 'CloudWeb'),
   }
 });

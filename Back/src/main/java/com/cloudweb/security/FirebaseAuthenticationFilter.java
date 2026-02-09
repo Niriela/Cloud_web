@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -26,6 +27,8 @@ import java.util.Optional;
 public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
 
     private final UserRepository userRepository;
+    @Value("${app.firebase.enabled:false}")
+    private boolean firebaseEnabled;
 
     @Override
     protected void doFilterInternal(
@@ -72,6 +75,13 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                 response.getWriter().write("{\"message\":\"Invalid offline token\"}");
                 return;
             }
+
+            if (!firebaseEnabled) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                response.getWriter().write("{\"message\":\"Firebase authentication is disabled\"}");
+                return;
+            }
             try {
                 FirebaseToken decoded = FirebaseAuth.getInstance().verifyIdToken(token);
                 FirebaseUserPrincipal principal = new FirebaseUserPrincipal(
@@ -86,6 +96,11 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                 response.getWriter().write("{\"message\":\"Invalid Firebase token\"}");
+                return;
+            } catch (RuntimeException ex) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                response.getWriter().write("{\"message\":\"Firebase authentication unavailable\"}");
                 return;
             }
         }

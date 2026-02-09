@@ -6,10 +6,6 @@ import com.cloudweb.entity.StatutsUser;
 import com.cloudweb.entity.User;
 import com.cloudweb.entity.UserType;
 import com.cloudweb.repository.UserRepository;
-import com.cloudweb.service.FirebaseSyncService;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseAuthException;
-import com.google.firebase.auth.UserRecord;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +16,6 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
-    private final FirebaseSyncService firebaseSyncService;
 
     public List<UserAdminDto> getAllUsers() {
         return userRepository.findAll()
@@ -40,9 +35,6 @@ public class UserService {
                     && userRepository.existsByEmailAndIdNot(newEmail, user.getId())) {
                 throw new RuntimeException("Email already exists");
             }
-            if (user.getFirebaseId() != null && !newEmail.equalsIgnoreCase(user.getEmail())) {
-                updateFirebaseEmail(user.getFirebaseId(), newEmail);
-            }
             user.setEmail(newEmail);
         }
         if (request.getFirstName() != null && !request.getFirstName().isBlank()) {
@@ -52,9 +44,7 @@ public class UserService {
             user.setLastName(request.getLastName().trim());
         }
 
-        User saved = userRepository.save(user);
-        firebaseSyncService.refreshAsync();
-        return toAdminDto(saved);
+        return toAdminDto(userRepository.save(user));
     }
 
     private UserAdminDto toAdminDto(User user) {
@@ -81,13 +71,4 @@ public class UserService {
         return "utilisateur".equalsIgnoreCase(userType.getLibelle());
     }
 
-    private void updateFirebaseEmail(String firebaseId, String newEmail) {
-        try {
-            FirebaseAuth.getInstance().updateUser(
-                    new UserRecord.UpdateRequest(firebaseId).setEmail(newEmail)
-            );
-        } catch (FirebaseAuthException ex) {
-            throw new RuntimeException("Firebase email update failed: " + ex.getMessage(), ex);
-        }
-    }
 }

@@ -1,96 +1,121 @@
 services:
-  postgres:
+  # -------------------------
+  # Base de données PostgreSQL
+  # -------------------------
+  db:
     image: postgres:16-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-cloudweb}-postgres
-    env_file:
-      - .env
+    container_name: cloudweb-postgres
+    restart: always
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-cloud_db}
     ports:
-      - "${DB_HOST_PORT}:${DB_CONTAINER_PORT}"
+      - "${DB_HOST_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d  # Optionnel
+      - ./init-db:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - cloudweb-network
-    restart: unless-stopped
 
+  # -------------------------
+  # Backend Spring Boot
+  # -------------------------
   backend:
-    build: ./Back
-    container_name: ${COMPOSE_PROJECT_NAME:-cloudweb}-api
-    env_file:
-      - .env
+    container_name: cloudweb-backend
+    image: maven:3.9-eclipse-temurin-21
+    working_dir: /app
     ports:
-      - "${SERVER_PORT}:8080"
-    environment:
-      # Configuration Spring
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      SERVER_PORT: 8080
-      
-      # Database
-      DB_HOST: postgres  # Nom du service Docker
-      DB_PORT: ${DB_CONTAINER_PORT}
-      DB_NAME: ${DB_NAME}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_SCHEMA: ${DB_SCHEMA}
-      
-      # JWT
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION_MS}
-      JWT_ISSUER: ${JWT_ISSUER}
-      
-      # Firebase
-      FIREBASE_ENABLED: ${FIREBASE_ENABLED}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
-      
-      # CORS
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
-      
-      # Sécurité
-      LOGIN_ATTEMPTS_LIMIT: ${LOGIN_ATTEMPTS_LIMIT}
+      - "${SERVER_PORT:-8080}:8080"
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
-    networks:
-      - cloudweb-network
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./Front
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=${REACT_APP_API_URL_DOCKER}
-    container_name: ${COMPOSE_PROJECT_NAME:-cloudweb}-frontend
-    env_file:
-      - .env
-    ports:
-      - "${FRONTEND_PORT}:80"  # Gardez 80 car Nginx écoute sur 80
     environment:
-      # Variables pour Vite
-      VITE_API_URL: ${REACT_APP_API_URL_DOCKER}
-      VITE_APP_NAME: ${REACT_APP_NAME}
-      VITE_APP_VERSION: ${REACT_APP_VERSION}
-      VITE_APP_ENV: ${REACT_APP_ENV}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-cloud_db}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      JWT_SECRET: ${JWT_SECRET:-your_secret_key_change_this_in_production_with_a_long_random_string_at_least_256_bits}
+      JWT_EXPIRATION: ${JWT_EXPIRATION_MS:-86400000}
+      FIREBASE_ENABLED: ${FIREBASE_ENABLED:-false}
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
+      APP_BOOTSTRAP_MODE: ${APP_BOOTSTRAP_MODE:-seed}
+      APP_BOOTSTRAP_SEED_DEFAULT_MANAGER: ${APP_BOOTSTRAP_SEED_DEFAULT_MANAGER:-true}
+      APP_BOOTSTRAP_MANAGER_EMAIL: ${APP_BOOTSTRAP_MANAGER_EMAIL:-manager@example.com}
+      APP_BOOTSTRAP_MANAGER_PASSWORD: ${APP_BOOTSTRAP_MANAGER_PASSWORD:-123456}
+      APP_BOOTSTRAP_MANAGER_FIRST_NAME: ${APP_BOOTSTRAP_MANAGER_FIRST_NAME:-Manager}
+      APP_BOOTSTRAP_MANAGER_LAST_NAME: ${APP_BOOTSTRAP_MANAGER_LAST_NAME:-Admin}
+    volumes:
+      - ./Back/src:/app/src
+      - ./Back/pom.xml:/app/pom.xml
+      - maven_repo:/root/.m2
+      - ./Back/target:/app/target
+      - ./secrets:/app/secrets:ro
+    command: mvn spring-boot:run
+
+  # -------------------------
+  # Frontend React + Vite
+  # -------------------------
+  frontend:
+    container_name: cloudweb-frontend
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./Front:/app
+      - /app/node_modules
+      - npm_cache:/root/.npm
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_BASE=${VITE_API_BASE:-http://localhost:8080}
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8080}
+      - VITE_APP_NAME=${REACT_APP_NAME:-CloudWeb}
+    command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0 --port 5173"
     depends_on:
       - backend
-    networks:
-      - cloudweb-network
-    restart: unless-stopped
 
-networks:
-  cloudweb-network:
-    driver: bridge
-    name: ${COMPOSE_PROJECT_NAME:-cloudweb}-network
+  # -------------------------
+  # OSM IMPORT (automatique au premier lancement uniquement)
+  # -------------------------
+  osm-import:
+    image: overv/openstreetmap-tile-server
+    container_name: osm_import
+    entrypoint: ["/bin/sh", "-c"]
+    volumes:
+      - ./Osm-server/data/madagascar.osm.pbf:/data/region.osm.pbf
+      - osm_data:/data/database
+    environment:
+      - SKIP_EXTERNAL_DATA=true
+    command:
+      - if [ -f /data/database/planet-import-complete ]; then echo "OSM deja importe, import ignore."; else /run.sh import; fi
+    restart: "no"
 
+  # -------------------------
+  # OSM TILE SERVER
+  # -------------------------
+  osm-server:
+    image: overv/openstreetmap-tile-server
+    container_name: osm_server
+    volumes:
+      - osm_data:/data/database
+    ports:
+      - "${OSM_PORT:-8090}:80"
+    command: run
+    depends_on:
+      osm-import:
+        condition: service_completed_successfully
+
+# -------------------------
+# Volumes persistants
+# -------------------------
 volumes:
   postgres_data:
-    name: ${COMPOSE_PROJECT_NAME:-cloudweb}-postgres-data
+  maven_repo:
+  npm_cache:
+  osm_data:
