@@ -23,7 +23,7 @@ jwt:
   expiration: 86400000 # 24 hours in milliseconds
 
 firebase:
-  service-account: ../cloud-web-mobile-firebase-adminsdk-fbsvc-25a331b444.json
+  service-account: ../cloud-web-mobile-firebase-adminsdk-fbsvc-11be2809cc.json
 
 logging:
   level:

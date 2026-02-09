@@ -1,23 +1,29 @@
-// Configuration et initialisation Firebase pour FCM
-import { initializeApp } from "firebase/app";
-import { getMessaging, onMessage } from "firebase/messaging";
+// Firebase Messaging helper based on the app initialized in app/lib/firebase.ts.
+import {
+  getMessaging,
+  isSupported,
+  onMessage,
+  type MessagePayload,
+} from "firebase/messaging";
+import { firebaseApp } from "../app/lib/firebase";
 
-const firebaseConfig = {
-  // TODO: Remplace par ta config Firebase
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
-};
+let messagingPromise: Promise<ReturnType<typeof getMessaging> | null> | null = null;
 
-const app = initializeApp(firebaseConfig);
-export const messaging = getMessaging(app);
+async function getMessagingInstance() {
+  if (!messagingPromise) {
+    messagingPromise = isSupported().then((supported) =>
+      supported ? getMessaging(firebaseApp) : null,
+    );
+  }
+  return messagingPromise;
+}
 
-// Fonction pour écouter les notifications FCM
-export function listenForNotifications(callback: (payload: any) => void) {
-  onMessage(messaging, (payload) => {
-    callback(payload);
-  });
+export async function listenForNotifications(
+  callback: (payload: MessagePayload) => void,
+) {
+  const messaging = await getMessagingInstance();
+  if (!messaging) {
+    return () => undefined;
+  }
+  return onMessage(messaging, callback);
 }

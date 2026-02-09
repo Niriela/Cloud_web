@@ -32,13 +32,17 @@ import com.google.firebase.auth.AuthErrorCode;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.UserRecord;
+import com.google.firebase.FirebaseApp;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.net.InetAddress;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -72,6 +76,71 @@ public class FirebaseSyncService {
     private Map<String, RemoteUserSnapshot> remoteUserByDocPath = new HashMap<>();
 
     private record RemoteUserSnapshot(String email, String password, String firebaseId) {
+    }
+
+    public Map<String, Object> firebaseHealthCheck() {
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("checkedAtUtc", Instant.now().toString());
+        report.put("javaTimeZone", java.time.ZoneId.systemDefault().toString());
+
+        report.put("firebaseAppsInitialized", !FirebaseApp.getApps().isEmpty());
+        report.put("firebaseAppsCount", FirebaseApp.getApps().size());
+
+        Map<String, Object> dns = new LinkedHashMap<>();
+        try {
+            InetAddress[] addresses = InetAddress.getAllByName("oauth2.googleapis.com");
+            String[] resolved = new String[addresses.length];
+            for (int i = 0; i < addresses.length; i++) {
+                resolved[i] = addresses[i].getHostAddress();
+            }
+            dns.put("ok", true);
+            dns.put("resolvedIps", resolved);
+        } catch (Exception ex) {
+            dns.put("ok", false);
+            dns.put("error", ex.getMessage());
+        }
+        report.put("dnsOauth2Googleapis", dns);
+
+        Map<String, Object> firestoreCheck = new LinkedHashMap<>();
+        try {
+            firestore.collection("users").limit(1).get().get();
+            firestoreCheck.put("ok", true);
+        } catch (Exception ex) {
+            firestoreCheck.put("ok", false);
+            firestoreCheck.put("error", flattenExceptionMessage(ex));
+        }
+        report.put("firestore", firestoreCheck);
+
+        Map<String, Object> authCheck = new LinkedHashMap<>();
+        try {
+            String probeUid = "healthcheck-nonexistent-uid-" + Instant.now().toEpochMilli();
+            FirebaseAuth.getInstance().getUser(probeUid);
+            authCheck.put("ok", true);
+            authCheck.put("note", "Unexpectedly found probe uid");
+        } catch (FirebaseAuthException ex) {
+            if (isUserNotFound(ex)) {
+                authCheck.put("ok", true);
+                authCheck.put("note", "Auth reachable (probe uid not found as expected)");
+            } else {
+                authCheck.put("ok", false);
+                authCheck.put("error", flattenExceptionMessage(ex));
+                if (ex.getAuthErrorCode() != null) {
+                    authCheck.put("authErrorCode", ex.getAuthErrorCode().name());
+                }
+            }
+        } catch (Exception ex) {
+            authCheck.put("ok", false);
+            authCheck.put("error", flattenExceptionMessage(ex));
+        }
+        report.put("firebaseAuth", authCheck);
+
+        boolean firestoreOk = Boolean.TRUE.equals(firestoreCheck.get("ok"));
+        boolean authOk = Boolean.TRUE.equals(authCheck.get("ok"));
+        boolean dnsOk = Boolean.TRUE.equals(dns.get("ok"));
+        boolean appOk = Boolean.TRUE.equals(report.get("firebaseAppsInitialized"));
+        report.put("overallOk", firestoreOk && authOk && dnsOk && appOk);
+
+        return report;
     }
 
     public Map<String, Long> getLocalCounts() {
@@ -296,9 +365,11 @@ public class FirebaseSyncService {
 
         try {
             batch.commit().get();
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Firebase push failed: " + ex.getMessage(), ex);
+            throw syncFailure("Firebase push failed", ex);
+        } catch (ExecutionException ex) {
+            throw syncFailure("Firebase push failed", ex);
         }
     }
 
@@ -341,9 +412,11 @@ public class FirebaseSyncService {
             syncSignalements();
             syncHistoriqueSignalements();
             syncHistoriqueUsers();
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Firebase pull failed: " + ex.getMessage(), ex);
+            throw syncFailure("Firebase pull failed", ex);
+        } catch (ExecutionException ex) {
+            throw syncFailure("Firebase pull failed", ex);
         }
     }
 
@@ -351,9 +424,11 @@ public class FirebaseSyncService {
         try {
             syncPoints();
             syncSignalements();
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Signalements merge from Firebase failed: " + ex.getMessage(), ex);
+            throw syncFailure("Signalements merge from Firebase failed", ex);
+        } catch (ExecutionException ex) {
+            throw syncFailure("Signalements merge from Firebase failed", ex);
         }
     }
 
@@ -362,9 +437,11 @@ public class FirebaseSyncService {
             syncStatutsUser();
             syncUserTypes();
             syncUsers();
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Users merge from Firebase failed: " + ex.getMessage(), ex);
+            throw syncFailure("Users merge from Firebase failed", ex);
+        } catch (ExecutionException ex) {
+            throw syncFailure("Users merge from Firebase failed", ex);
         }
     }
 
@@ -934,8 +1011,11 @@ public class FirebaseSyncService {
     private long countCollection(String name) {
         try {
             return firestore.collection(name).get().get().size();
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+            return 0L;
+        } catch (ExecutionException ex) {
+            log.warn("Unable to count Firestore collection {}", name, ex);
             return 0L;
         }
     }
@@ -957,8 +1037,10 @@ public class FirebaseSyncService {
                 }
                 return keep;
             }
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to resolve remote doc by numeric id for {}:{}", collection, id, ex);
         }
         try {
             QuerySnapshot snapshot = firestore.collection(collection)
@@ -973,8 +1055,10 @@ public class FirebaseSyncService {
                 }
                 return keep;
             }
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to resolve remote doc by string id for {}:{}", collection, id, ex);
         }
         return firestore.collection(collection).document(String.valueOf(id));
     }
@@ -1250,8 +1334,10 @@ public class FirebaseSyncService {
                     }
                 }
             }
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to index remote points", ex);
         }
 
         try {
@@ -1277,8 +1363,10 @@ public class FirebaseSyncService {
                     }
                 }
             }
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to index remote signalements", ex);
         }
 
         try {
@@ -1318,8 +1406,10 @@ public class FirebaseSyncService {
 
                 remoteUserByDocPath.put(ref.getPath(), new RemoteUserSnapshot(email, password, firebaseId));
             }
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to index remote users", ex);
         }
     }
 
@@ -1334,8 +1424,10 @@ public class FirebaseSyncService {
                     .get()
                     .get();
             deleted = deleteAllDocs(snapshot, batch) || deleted;
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to delete remote docs by numeric id for {}:{}", collection, id, ex);
         }
         try {
             QuerySnapshot snapshot = firestore.collection(collection)
@@ -1343,8 +1435,10 @@ public class FirebaseSyncService {
                     .get()
                     .get();
             deleted = deleteAllDocs(snapshot, batch) || deleted;
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to delete remote docs by string id for {}:{}", collection, id, ex);
         }
         return deleted;
     }
@@ -1369,8 +1463,11 @@ public class FirebaseSyncService {
             }
             QuerySnapshot snapshot = query.get().get();
             return deleteAllDocs(snapshot, batch);
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to delete remote signalement by natural key point={}, type={}, user={}",
+                    pointId, typeId, userId, ex);
         }
         return false;
     }
@@ -1419,6 +1516,48 @@ public class FirebaseSyncService {
         return !Objects.equals(normalizeEmail(left), normalizeEmail(right));
     }
 
+    private String flattenExceptionMessage(Throwable throwable) {
+        if (throwable == null) {
+            return "Unknown error";
+        }
+        StringBuilder builder = new StringBuilder();
+        Throwable current = throwable;
+        int depth = 0;
+        while (current != null && depth < 5) {
+            String part = current.getClass().getSimpleName();
+            String message = current.getMessage();
+            if (message != null && !message.isBlank()) {
+                part += ": " + message;
+            }
+            if (builder.length() > 0) {
+                builder.append(" | cause: ");
+            }
+            builder.append(part);
+            current = current.getCause();
+            depth++;
+        }
+        return builder.toString();
+    }
+
+    private RuntimeException syncFailure(String prefix, Exception ex) {
+        String message = ex != null ? ex.getMessage() : null;
+        if ((message == null || message.isBlank()) && ex != null && ex.getCause() != null) {
+            message = ex.getCause().getMessage();
+        }
+        if (message == null || message.isBlank()) {
+            message = ex != null ? ex.getClass().getSimpleName() : "Unknown error";
+        }
+        String normalized = message.toLowerCase();
+        if (normalized.contains("credentials failed to obtain metadata")
+                || normalized.contains("unable to load the default credentials")
+                || normalized.contains("statusruntimeexception: unavailable")) {
+            message = message
+                    + " | Firebase credentials/token unavailable. "
+                    + "Verify service-account JSON, internet egress from backend, DNS/TLS access to oauth2.googleapis.com, and system clock.";
+        }
+        return new RuntimeException(prefix + ": " + message, ex);
+    }
+
     private boolean shouldPush(String collection, Long id, LocalDateTime localUpdatedAt) {
         LocalDateTime remoteUpdatedAt = getRemoteUpdatedAt(collection, id);
         if (localUpdatedAt == null) {
@@ -1443,8 +1582,10 @@ public class FirebaseSyncService {
             if (!docs.isEmpty()) {
                 return resolveUpdatedAtFromDoc(docs.get(0));
             }
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to fetch remote updated_at for {}:{}", collection, id, ex);
         }
         try {
             QuerySnapshot snapshot = firestore.collection(collection)
@@ -1455,8 +1596,10 @@ public class FirebaseSyncService {
             if (!docs.isEmpty()) {
                 return resolveUpdatedAtFromDoc(docs.get(0));
             }
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            log.warn("Failed to fetch remote updated_at for {}:{} (string id)", collection, id, ex);
         }
         return null;
     }

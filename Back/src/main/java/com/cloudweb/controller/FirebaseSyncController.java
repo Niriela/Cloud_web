@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,6 +57,21 @@ public class FirebaseSyncController {
             return ResponseEntity.status(500).body(Map.of(
                     "status", "error",
                     "message", ex.getMessage()
+            ));
+        }
+    }
+
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> health() {
+        try {
+            return ResponseEntity.ok(firebaseSyncService.firebaseHealthCheck());
+        } catch (RuntimeException ex) {
+            log.error("Firebase health check failed", ex);
+            String message = ex.getMessage() != null ? ex.getMessage() : "Health check failed";
+            return ResponseEntity.status(500).body(Map.of(
+                    "overallOk", false,
+                    "status", "error",
+                    "message", message
             ));
         }
     }
