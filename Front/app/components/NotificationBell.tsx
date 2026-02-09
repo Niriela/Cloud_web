@@ -1,25 +1,24 @@
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Bell } from "lucide-react";
-import { getFirestoreSignalements } from "~/lib/firestore-data";
+import { getSignalements, type SignalementMapDto } from "~/lib/api";
 
 export function NotificationBell() {
   const [hasNotif, setHasNotif] = useState(false);
-  const [changedSignalements, setChangedSignalements] = useState<any[]>([]);
+  const [changedSignalements, setChangedSignalements] = useState<SignalementMapDto[]>([]);
   const [showPopup, setShowPopup] = useState(false);
-  const [prevSignalements, setPrevSignalements] = useState<any[]>([]);
+  const previousRef = useRef<SignalementMapDto[]>([]);
 
   useEffect(() => {
-    let mounted = true;
     async function checkStatus() {
-      const signalements = await getFirestoreSignalements();
-      if (prevSignalements.length === 0) {
-        setPrevSignalements(signalements);
+      const signalements = await getSignalements();
+      const previous = previousRef.current;
+      if (previous.length === 0) {
+        previousRef.current = signalements;
         return;
       }
       // Trouver tous les signalements dont le statut a changé
       const modifs = signalements.filter(sig => {
-        const prev = prevSignalements.find(s => s.id === sig.id);
+        const prev = previous.find(s => s.id === sig.id);
         return prev && prev.statut !== sig.statut;
       });
       if (modifs.length > 0) {
@@ -35,15 +34,14 @@ export function NotificationBell() {
           return newList;
         });
       }
-      setPrevSignalements(signalements);
+      previousRef.current = signalements;
     }
     checkStatus();
     const interval = setInterval(checkStatus, 10000); // vérifie toutes les 10s
     return () => {
-      mounted = false;
       clearInterval(interval);
     };
-  }, [prevSignalements]);
+  }, []);
 
   const handleClick = () => {
     if (hasNotif) setShowPopup((v) => !v);

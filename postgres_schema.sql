@@ -25,6 +25,15 @@ CREATE TABLE IF NOT EXISTS statuts (
     updated_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS statuts_pourcentage (
+    id BIGSERIAL PRIMARY KEY,
+    statuts_id BIGINT,
+    pourcentage INTEGER,
+    updated_at TIMESTAMP,
+    CONSTRAINT fk_statuts_pourcentage_statuts
+        FOREIGN KEY (statuts_id) REFERENCES statuts(id)
+)
+
 CREATE TABLE IF NOT EXISTS type_signalement (
     id BIGSERIAL PRIMARY KEY,
     libelle VARCHAR(255),
@@ -65,7 +74,7 @@ CREATE TABLE IF NOT EXISTS users (
         FOREIGN KEY (user_type_id) REFERENCES user_type(id)
 );
 
-CREATE TABLE IF NOT EXISTS signalements (
+CREATE TABLE IF NOT EXISTS signalemaents (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT,
     point_id BIGINT,
@@ -86,6 +95,15 @@ CREATE TABLE IF NOT EXISTS signalements (
         FOREIGN KEY (statuts_id) REFERENCES statuts(id),
     CONSTRAINT fk_signalements_entreprise
         FOREIGN KEY (entreprise_id) REFERENCES entreprise(id)
+);
+
+CREATE TABLE IF NOT EXISTS photos (
+    id BIGSERIAL PRIMARY KEY,
+    signalements_id BIGINT,
+    nom_fichier VARCHAR(255),
+    updated_at TIMESTAMP,
+    CONSTRAINT fk_photos_signalements
+        FOREIGN KEY (signalements_id) REFERENCES signalements(id)
 );
 
 CREATE TABLE IF NOT EXISTS historique_signalements (

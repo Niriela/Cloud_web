@@ -9,13 +9,11 @@ import {
   FieldSeparator,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
-import { getAuthSession, loginOffline } from "~/lib/api"
+import { login } from "~/lib/api"
 import { useAuth } from "~/components/auth/auth-provider"
 import { useState } from "react"
 import { useNavigate } from "react-router"
-import { signInWithEmailAndPassword } from "firebase/auth"
-import { firebaseAuth } from "~/lib/firebase"
-import { clearAuthSession, setAuthToken } from "~/lib/auth"
+import { clearAuthSession } from "~/lib/auth"
 
 export function LoginForm({
   className,
@@ -34,23 +32,9 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
-      if (!navigator.onLine) {
-        const response = await loginOffline({ email, password })
-        setSession(response)
-        navigate("/Visiteurs")
-      } else {
-        const credential = await signInWithEmailAndPassword(
-          firebaseAuth,
-          email,
-          password,
-        )
-        const idToken = await credential.user.getIdToken()
-        setAuthToken(idToken)
-
-        const response = await getAuthSession()
-        setSession(response)
-        navigate("/Visiteurs")
-      }
+      const response = await login({ email, password })
+      setSession(response)
+      navigate("/Visiteurs")
     } catch (err) {
       clearAuthSession()
       const rawMessage =

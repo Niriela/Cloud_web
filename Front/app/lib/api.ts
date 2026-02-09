@@ -118,6 +118,13 @@ export function getAuthSession() {
   });
 }
 
+export function login(payload: LoginPayload) {
+  return apiRequest<AuthResponse>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function loginOffline(payload: LoginPayload) {
   return apiRequest<AuthResponse>("/api/auth/offline/login", {
     method: "POST",

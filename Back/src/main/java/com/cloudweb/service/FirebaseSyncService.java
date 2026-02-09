@@ -28,6 +28,10 @@ import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 import com.google.cloud.Timestamp;
+import com.google.firebase.auth.AuthErrorCode;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseAuthException;
+import com.google.firebase.auth.UserRecord;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -36,6 +40,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
@@ -61,6 +66,13 @@ public class FirebaseSyncService {
     private Map<Long, DocumentReference> remotePointById = new HashMap<>();
     private Map<String, DocumentReference> remoteSignalementByKey = new HashMap<>();
     private Map<Long, DocumentReference> remoteSignalementById = new HashMap<>();
+    private Map<Long, DocumentReference> remoteUserById = new HashMap<>();
+    private Map<String, DocumentReference> remoteUserByEmail = new HashMap<>();
+    private Map<String, DocumentReference> remoteUserByFirebaseId = new HashMap<>();
+    private Map<String, RemoteUserSnapshot> remoteUserByDocPath = new HashMap<>();
+
+    private record RemoteUserSnapshot(String email, String password, String firebaseId) {
+    }
 
     public Map<String, Long> getLocalCounts() {
         Map<String, Long> counts = new HashMap<>();
@@ -210,25 +222,45 @@ public class FirebaseSyncService {
         }
 
         for (User user : userRepository.findAll()) {
-            if (!shouldPush("users", user.getId(), user.getUpdatedAt())) {
+            DocumentReference ref = resolveRemoteUserDoc(user);
+            RemoteUserSnapshot remote = remoteUserByDocPath.get(ref.getPath());
+            boolean emailChanged = isDifferentEmail(remote != null ? remote.email() : null, user.getEmail());
+            boolean passwordChanged = remote == null || !Objects.equals(remote.password(), user.getPassword());
+            boolean firebaseIdChanged =
+                    remote == null || !Objects.equals(blankToNull(remote.firebaseId()), blankToNull(user.getFirebaseId()));
+
+            User syncedUser = ensureFirebaseAuthUserSynced(user, emailChanged, passwordChanged, firebaseIdChanged);
+            if (!shouldPush("users", syncedUser.getId(), syncedUser.getUpdatedAt())
+                    && !emailChanged
+                    && !passwordChanged
+                    && !firebaseIdChanged) {
                 continue;
             }
-            DocumentReference ref = resolveRemoteDoc("users", user.getId(), batch);
+
+            ref = resolveRemoteUserDoc(syncedUser);
             Map<String, Object> data = new HashMap<>();
-            data.put("id", user.getId());
-            data.put("email", user.getEmail());
-            data.put("password", user.getPassword());
-            data.put("firebase_id", user.getFirebaseId());
-            data.put("first_name", user.getFirstName());
-            data.put("last_name", user.getLastName());
-            data.put("date", user.getDate() != null ? user.getDate().toString() : null);
-            data.put("failed_login_attempts", user.getFailedLoginAttempts());
+            data.put("id", syncedUser.getId());
+            data.put("email", syncedUser.getEmail());
+            data.put("password", syncedUser.getPassword());
+            data.put("firebase_id", syncedUser.getFirebaseId());
+            data.put("first_name", syncedUser.getFirstName());
+            data.put("last_name", syncedUser.getLastName());
+            data.put("date", syncedUser.getDate() != null ? syncedUser.getDate().toString() : null);
+            data.put("failed_login_attempts", syncedUser.getFailedLoginAttempts());
             data.put("statuts_user_id",
-                    user.getStatutsUser() != null ? user.getStatutsUser().getId() : null);
+                    syncedUser.getStatutsUser() != null ? syncedUser.getStatutsUser().getId() : null);
             data.put("user_type_id",
-                    user.getUserType() != null ? user.getUserType().getId() : null);
-            data.put("updated_at", formatDate(user.getUpdatedAt()));
+                    syncedUser.getUserType() != null ? syncedUser.getUserType().getId() : null);
+            data.put("updated_at", formatDate(syncedUser.getUpdatedAt()));
             batch.set(ref, data);
+
+            indexRemoteUserRef(
+                    ref,
+                    syncedUser.getId(),
+                    syncedUser.getEmail(),
+                    syncedUser.getFirebaseId(),
+                    syncedUser.getPassword()
+            );
         }
 
         for (HistoriqueSignalements historique : historiqueSignalementsRepository.findAll()) {
@@ -317,7 +349,6 @@ public class FirebaseSyncService {
 
     @Async
     public void refreshAsync() {
-        pullAllFromFirebase();
         pushAllToFirebase();
     }
 
@@ -978,11 +1009,205 @@ public class FirebaseSyncService {
         return firestore.collection("signalements").document();
     }
 
+    private DocumentReference resolveRemoteUserDoc(User user) {
+        if (user == null) {
+            return firestore.collection("users").document();
+        }
+        if (user.getId() != null) {
+            DocumentReference byId = remoteUserById.get(user.getId());
+            if (byId != null) {
+                return byId;
+            }
+        }
+        String firebaseId = blankToNull(user.getFirebaseId());
+        if (firebaseId != null) {
+            DocumentReference byFirebaseId = remoteUserByFirebaseId.get(firebaseId);
+            if (byFirebaseId != null) {
+                return byFirebaseId;
+            }
+        }
+        String email = normalizeEmail(user.getEmail());
+        if (email != null) {
+            DocumentReference byEmail = remoteUserByEmail.get(email);
+            if (byEmail != null) {
+                return byEmail;
+            }
+        }
+        if (user.getId() != null) {
+            return firestore.collection("users").document(String.valueOf(user.getId()));
+        }
+        return firestore.collection("users").document();
+    }
+
+    private void indexRemoteUserRef(
+            DocumentReference ref,
+            Long id,
+            String email,
+            String firebaseId,
+            String password
+    ) {
+        if (ref == null) {
+            return;
+        }
+        if (id != null) {
+            remoteUserById.put(id, ref);
+        }
+        String normalizedEmail = normalizeEmail(email);
+        if (normalizedEmail != null) {
+            remoteUserByEmail.put(normalizedEmail, ref);
+        }
+        String normalizedFirebaseId = blankToNull(firebaseId);
+        if (normalizedFirebaseId != null) {
+            remoteUserByFirebaseId.put(normalizedFirebaseId, ref);
+        }
+        remoteUserByDocPath.put(
+                ref.getPath(),
+                new RemoteUserSnapshot(normalizedEmail, password, normalizedFirebaseId)
+        );
+    }
+
+    private User ensureFirebaseAuthUserSynced(
+            User user,
+            boolean emailChanged,
+            boolean passwordChanged,
+            boolean firebaseIdChanged
+    ) {
+        if (user == null) {
+            return null;
+        }
+        String email = normalizeEmail(user.getEmail());
+        String password = user.getPassword();
+        if (email == null || password == null || password.isBlank()) {
+            throw new RuntimeException("Invalid user data for Firebase sync (email/password required)");
+        }
+
+        FirebaseAuth auth = FirebaseAuth.getInstance();
+        UserRecord byUid = findFirebaseUserByUid(blankToNull(user.getFirebaseId()));
+        UserRecord byEmail = findFirebaseUserByEmail(email);
+
+        UserRecord target = byUid != null ? byUid : byEmail;
+        if (target == null) {
+            try {
+                UserRecord created = auth.createUser(new UserRecord.CreateRequest()
+                        .setEmail(email)
+                        .setPassword(password)
+                        .setDisplayName(buildDisplayName(user)));
+                user.setFirebaseId(created.getUid());
+                return userRepository.save(user);
+            } catch (FirebaseAuthException ex) {
+                throw new RuntimeException("Firebase Auth user creation failed: " + ex.getMessage(), ex);
+            }
+        }
+
+        if (byUid != null && byEmail != null && !byUid.getUid().equals(byEmail.getUid())) {
+            throw new RuntimeException("Firebase Auth conflict: email already attached to another uid for " + email);
+        }
+
+        boolean localUpdated = false;
+        if (!Objects.equals(blankToNull(user.getFirebaseId()), target.getUid())) {
+            user.setFirebaseId(target.getUid());
+            localUpdated = true;
+        }
+
+        UserRecord.UpdateRequest update = new UserRecord.UpdateRequest(target.getUid());
+        boolean authNeedsUpdate = false;
+
+        String currentEmail = normalizeEmail(target.getEmail());
+        if ((emailChanged || firebaseIdChanged) && !Objects.equals(currentEmail, email)) {
+            update.setEmail(email);
+            authNeedsUpdate = true;
+        }
+        if (passwordChanged) {
+            update.setPassword(password);
+            authNeedsUpdate = true;
+        }
+        String displayName = buildDisplayName(user);
+        if (!Objects.equals(blankToNull(target.getDisplayName()), displayName)) {
+            update.setDisplayName(displayName);
+            authNeedsUpdate = true;
+        }
+
+        if (authNeedsUpdate) {
+            try {
+                auth.updateUser(update);
+            } catch (FirebaseAuthException ex) {
+                throw new RuntimeException("Firebase Auth user update failed: " + ex.getMessage(), ex);
+            }
+        }
+
+        if (localUpdated) {
+            return userRepository.save(user);
+        }
+        return user;
+    }
+
+    private UserRecord findFirebaseUserByUid(String uid) {
+        if (uid == null) {
+            return null;
+        }
+        try {
+            return FirebaseAuth.getInstance().getUser(uid);
+        } catch (FirebaseAuthException ex) {
+            if (isUserNotFound(ex)) {
+                return null;
+            }
+            throw new RuntimeException("Firebase Auth lookup by uid failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    private UserRecord findFirebaseUserByEmail(String email) {
+        if (email == null) {
+            return null;
+        }
+        try {
+            return FirebaseAuth.getInstance().getUserByEmail(email);
+        } catch (FirebaseAuthException ex) {
+            if (isUserNotFound(ex)) {
+                return null;
+            }
+            throw new RuntimeException("Firebase Auth lookup by email failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    private String buildDisplayName(User user) {
+        String first = blankToNull(user != null ? user.getFirstName() : null);
+        String last = blankToNull(user != null ? user.getLastName() : null);
+        if (first == null && last == null) {
+            return null;
+        }
+        if (first == null) {
+            return last;
+        }
+        if (last == null) {
+            return first;
+        }
+        return first + " " + last;
+    }
+
+    private boolean isUserNotFound(FirebaseAuthException ex) {
+        if (ex == null) {
+            return false;
+        }
+        if (ex.getAuthErrorCode() == AuthErrorCode.USER_NOT_FOUND) {
+            return true;
+        }
+        String message = ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase();
+        return normalized.contains("no user record") || normalized.contains("user not found");
+    }
+
     private void prepareRemoteIndexes(WriteBatch batch) {
         remotePointByCoord = new HashMap<>();
         remotePointById = new HashMap<>();
         remoteSignalementByKey = new HashMap<>();
         remoteSignalementById = new HashMap<>();
+        remoteUserById = new HashMap<>();
+        remoteUserByEmail = new HashMap<>();
+        remoteUserByFirebaseId = new HashMap<>();
+        remoteUserByDocPath = new HashMap<>();
 
         try {
             QuerySnapshot points = firestore.collection("points").get().get();
@@ -1030,6 +1255,47 @@ public class FirebaseSyncService {
                         batch.delete(doc.getReference());
                     }
                 }
+            }
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+        }
+
+        try {
+            QuerySnapshot users = firestore.collection("users").get().get();
+            for (DocumentSnapshot doc : users.getDocuments()) {
+                DocumentReference ref = doc.getReference();
+                Long id = getLong(doc, "id");
+                String email = normalizeEmail(getString(doc, "email"));
+                String firebaseId = blankToNull(getString(doc, "firebase_id", "firebaseId"));
+                String password = getString(doc, "password");
+
+                boolean duplicate = false;
+
+                if (id != null) {
+                    DocumentReference existing = remoteUserById.putIfAbsent(id, ref);
+                    if (existing != null && !existing.getPath().equals(ref.getPath())) {
+                        duplicate = true;
+                    }
+                }
+                if (!duplicate && email != null) {
+                    DocumentReference existing = remoteUserByEmail.putIfAbsent(email, ref);
+                    if (existing != null && !existing.getPath().equals(ref.getPath())) {
+                        duplicate = true;
+                    }
+                }
+                if (!duplicate && firebaseId != null) {
+                    DocumentReference existing = remoteUserByFirebaseId.putIfAbsent(firebaseId, ref);
+                    if (existing != null && !existing.getPath().equals(ref.getPath())) {
+                        duplicate = true;
+                    }
+                }
+
+                if (duplicate) {
+                    batch.delete(ref);
+                    continue;
+                }
+
+                remoteUserByDocPath.put(ref.getPath(), new RemoteUserSnapshot(email, password, firebaseId));
             }
         } catch (InterruptedException | ExecutionException ex) {
             Thread.currentThread().interrupt();
@@ -1113,6 +1379,23 @@ public class FirebaseSyncService {
         }
         String base = pointId + "|" + typeId + "|" + date;
         return userId != null ? base + "|" + userId : base;
+    }
+
+    private String normalizeEmail(String email) {
+        String value = blankToNull(email);
+        return value != null ? value.toLowerCase() : null;
+    }
+
+    private String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean isDifferentEmail(String left, String right) {
+        return !Objects.equals(normalizeEmail(left), normalizeEmail(right));
     }
 
     private boolean shouldPush(String collection, Long id, LocalDateTime localUpdatedAt) {
