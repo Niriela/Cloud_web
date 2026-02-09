@@ -73,8 +73,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       await syncFirebase()
       setSyncMessage("Synchronisation terminee.")
     } catch (error) {
-      if (error && typeof error === "object" && "message" in error) {
-        setSyncMessage(String(error.message))
+      if (error && typeof error === "object") {
+        const hasStatus = "status" in error && typeof error.status === "number"
+        const hasMessage = "message" in error
+        if (hasStatus && (error.status === 404 || error.status === 503)) {
+          setSyncMessage(
+            "Synchronisation Firebase indisponible. Activez FIREBASE_ENABLED=true et configurez FIREBASE_SERVICE_ACCOUNT."
+          )
+        } else if (hasMessage) {
+          setSyncMessage(String(error.message))
+        } else {
+          setSyncMessage("Echec de la synchronisation.")
+        }
       } else {
         setSyncMessage("Echec de la synchronisation.")
       }

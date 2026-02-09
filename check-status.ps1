@@ -4,9 +4,17 @@ Write-Host ""
 $services = @("cloudweb-postgres", "cloudweb-backend", "cloudweb-frontend", "osm_import", "osm_server")
 
 foreach ($service in $services) {
-    $status = docker inspect $service --format='{{.State.Status}}' 2>$null
-    if ($status) {
-        $color = if ($status -eq "running") { "Green" } elseif ($status -eq "exited") { "Red" } else { "Yellow" }
+    $state = docker inspect $service --format='{{.State.Status}}|{{.State.ExitCode}}' 2>$null
+    if ($state) {
+        $parts = $state -split '\|'
+        $status = $parts[0]
+        $exitCode = if ($parts.Count -gt 1) { [int]$parts[1] } else { -1 }
+
+        if ($service -eq "osm_import" -and $status -eq "exited" -and $exitCode -eq 0) {
+            $status = "completed"
+        }
+
+        $color = if ($status -eq "running" -or $status -eq "completed") { "Green" } elseif ($status -eq "exited") { "Red" } else { "Yellow" }
         Write-Host "  $service : " -NoNewline
         Write-Host $status -ForegroundColor $color
     }

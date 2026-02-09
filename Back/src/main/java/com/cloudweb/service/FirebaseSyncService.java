@@ -35,10 +35,13 @@ import com.google.firebase.auth.UserRecord;
 import com.google.firebase.FirebaseApp;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.net.InetAddress;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Instant;
 import java.util.HashMap;
@@ -49,6 +52,7 @@ import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
 @Service
+@ConditionalOnProperty(prefix = "app.firebase", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class FirebaseSyncService {
@@ -65,6 +69,7 @@ public class FirebaseSyncService {
     private final ReglesGestionRepository reglesGestionRepository;
     private final HistoriqueSignalementsRepository historiqueSignalementsRepository;
     private final HistoriqueUsersRepository historiqueUsersRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     private Map<String, DocumentReference> remotePointByCoord = new HashMap<>();
     private Map<Long, DocumentReference> remotePointById = new HashMap<>();
@@ -412,6 +417,7 @@ public class FirebaseSyncService {
             syncSignalements();
             syncHistoriqueSignalements();
             syncHistoriqueUsers();
+            alignPostgresIdSequences();
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw syncFailure("Firebase pull failed", ex);
@@ -424,6 +430,7 @@ public class FirebaseSyncService {
         try {
             syncPoints();
             syncSignalements();
+            alignPostgresIdSequences();
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw syncFailure("Signalements merge from Firebase failed", ex);
@@ -437,6 +444,7 @@ public class FirebaseSyncService {
             syncStatutsUser();
             syncUserTypes();
             syncUsers();
+            alignPostgresIdSequences();
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw syncFailure("Users merge from Firebase failed", ex);
@@ -875,11 +883,57 @@ public class FirebaseSyncService {
                 }
 
                 signalement.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
-                signalementsRepository.save(signalement);
+                if (existing == null && id != null) {
+                    upsertSignalementWithExplicitId(signalement, id);
+                } else {
+                    signalementsRepository.save(signalement);
+                }
             } catch (Exception ex) {
                 log.warn("Skipping signalements {} due to error", doc.getId(), ex);
             }
         }
+    }
+
+    private void upsertSignalementWithExplicitId(Signalements signalement, Long id) {
+        if (signalement == null || id == null) {
+            return;
+        }
+        jdbcTemplate.update(
+                """
+                        insert into signalements (
+                            id,
+                            user_id,
+                            point_id,
+                            type_signalement_id,
+                            date,
+                            surface,
+                            budget,
+                            updated_at,
+                            statuts_id,
+                            entreprise_id
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        on conflict (id) do update set
+                            user_id = excluded.user_id,
+                            point_id = excluded.point_id,
+                            type_signalement_id = excluded.type_signalement_id,
+                            date = excluded.date,
+                            surface = excluded.surface,
+                            budget = excluded.budget,
+                            updated_at = excluded.updated_at,
+                            statuts_id = excluded.statuts_id,
+                            entreprise_id = excluded.entreprise_id
+                        """,
+                id,
+                signalement.getUser() != null ? signalement.getUser().getId() : null,
+                signalement.getPoint() != null ? signalement.getPoint().getId() : null,
+                signalement.getTypeSignalement() != null ? signalement.getTypeSignalement().getId() : null,
+                signalement.getDate(),
+                signalement.getSurface(),
+                signalement.getBudget(),
+                signalement.getUpdatedAt(),
+                signalement.getStatuts() != null ? signalement.getStatuts().getId() : null,
+                signalement.getEntreprise() != null ? signalement.getEntreprise().getId() : null
+        );
     }
 
     private void syncHistoriqueSignalements() throws ExecutionException, InterruptedException {
@@ -1317,7 +1371,7 @@ public class FirebaseSyncService {
         try {
             QuerySnapshot points = firestore.collection("points").get().get();
             for (DocumentSnapshot doc : points.getDocuments()) {
-                Long id = getLong(doc, "id");
+                Long id = resolveId(doc);
                 if (id != null) {
                     DocumentReference existing = remotePointById.putIfAbsent(id, doc.getReference());
                     if (existing != null) {
@@ -1343,17 +1397,21 @@ public class FirebaseSyncService {
         try {
             QuerySnapshot signalements = firestore.collection("signalements").get().get();
             for (DocumentSnapshot doc : signalements.getDocuments()) {
-                Long id = getLong(doc, "id");
+                Long id = resolveId(doc);
                 if (id != null) {
                     DocumentReference existing = remoteSignalementById.putIfAbsent(id, doc.getReference());
                     if (existing != null) {
                         batch.delete(doc.getReference());
                     }
                 }
+                LocalDateTime dateValue = getDate(doc, "date");
+                if (dateValue == null) {
+                    dateValue = getDate(doc, "created_at");
+                }
                 String key = signalementKey(
                         getLong(doc, "point_id"),
                         getLong(doc, "type_signalement_id"),
-                        getDate(doc, "date") != null ? getDate(doc, "date").toString() : null,
+                        dateValue != null ? dateValue.toString() : null,
                         getLong(doc, "user_id")
                 );
                 if (key != null) {
@@ -1614,14 +1672,27 @@ public class FirebaseSyncService {
 
     private Long getLong(DocumentSnapshot doc, String field) {
         Object value = doc.get(field);
+        return parseLongValue(value);
+    }
+
+    private Long parseLongValue(Object value) {
         if (value instanceof Number number) {
             return number.longValue();
         }
         if (value instanceof String text) {
-            try {
-                return Long.parseLong(text);
-            } catch (NumberFormatException ex) {
+            String normalized = text.trim();
+            if (normalized.isEmpty()) {
                 return null;
+            }
+            try {
+                return Long.parseLong(normalized);
+            } catch (NumberFormatException ex) {
+                try {
+                    BigDecimal decimal = new BigDecimal(normalized);
+                    return decimal.stripTrailingZeros().longValueExact();
+                } catch (Exception ignored) {
+                    return null;
+                }
             }
         }
         return null;
@@ -1726,5 +1797,58 @@ public class FirebaseSyncService {
             return false;
         }
         return remoteUpdatedAt.isAfter(localUpdatedAt);
+    }
+
+    private void alignPostgresIdSequences() {
+        try {
+            String schema = jdbcTemplate.queryForObject("select current_schema()", String.class);
+            if (schema == null || schema.isBlank()) {
+                schema = "public";
+            }
+
+            var tables = jdbcTemplate.queryForList(
+                    """
+                            select table_name
+                            from information_schema.columns
+                            where table_schema = ?
+                              and column_name = 'id'
+                            order by table_name
+                            """,
+                    String.class,
+                    schema
+            );
+
+            for (String table : tables) {
+                if (table == null || !table.matches("[a-zA-Z0-9_]+")) {
+                    continue;
+                }
+                String qualifiedTable = schema + "." + table;
+                String sequence = jdbcTemplate.queryForObject(
+                        "select pg_get_serial_sequence(?, 'id')",
+                        String.class,
+                        qualifiedTable
+                );
+                if (sequence == null || sequence.isBlank()) {
+                    continue;
+                }
+
+                Long nextValue = jdbcTemplate.queryForObject(
+                        "select coalesce(max(id), 0) + 1 from "
+                                + quoteIdentifier(schema) + "." + quoteIdentifier(table),
+                        Long.class
+                );
+                if (nextValue == null || nextValue < 1L) {
+                    nextValue = 1L;
+                }
+
+                jdbcTemplate.update("select setval(?::regclass, ?, false)", sequence, nextValue);
+            }
+        } catch (Exception ex) {
+            log.warn("Unable to align PostgreSQL id sequences after Firebase sync", ex);
+        }
+    }
+
+    private String quoteIdentifier(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 }

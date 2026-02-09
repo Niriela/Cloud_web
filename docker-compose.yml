@@ -26,15 +26,15 @@ services:
   # -------------------------
   backend:
     container_name: cloudweb-backend
-    build:
-      context: ./Back
-      dockerfile: Dockerfile
+    image: maven:3.9-eclipse-temurin-21
+    working_dir: /app
     ports:
       - "${SERVER_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-cloud_db}
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -42,11 +42,20 @@ services:
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
       JWT_SECRET: ${JWT_SECRET:-your_secret_key_change_this_in_production_with_a_long_random_string_at_least_256_bits}
       JWT_EXPIRATION: ${JWT_EXPIRATION_MS:-86400000}
+      FIREBASE_ENABLED: ${FIREBASE_ENABLED:-false}
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
+      APP_BOOTSTRAP_MODE: ${APP_BOOTSTRAP_MODE:-seed}
+      APP_BOOTSTRAP_SEED_DEFAULT_MANAGER: ${APP_BOOTSTRAP_SEED_DEFAULT_MANAGER:-true}
+      APP_BOOTSTRAP_MANAGER_EMAIL: ${APP_BOOTSTRAP_MANAGER_EMAIL:-manager@example.com}
+      APP_BOOTSTRAP_MANAGER_PASSWORD: ${APP_BOOTSTRAP_MANAGER_PASSWORD:-123456}
+      APP_BOOTSTRAP_MANAGER_FIRST_NAME: ${APP_BOOTSTRAP_MANAGER_FIRST_NAME:-Manager}
+      APP_BOOTSTRAP_MANAGER_LAST_NAME: ${APP_BOOTSTRAP_MANAGER_LAST_NAME:-Admin}
     volumes:
       - ./Back/src:/app/src
       - ./Back/pom.xml:/app/pom.xml
       - maven_repo:/root/.m2
       - ./Back/target:/app/target
+      - ./secrets:/app/secrets:ro
     command: mvn spring-boot:run
 
   # -------------------------
@@ -64,24 +73,27 @@ services:
       - "${FRONTEND_PORT:-5173}:5173"
     environment:
       - CHOKIDAR_USEPOLLING=true
-      - VITE_API_URL=http://localhost:8080/api
+      - VITE_API_BASE=${VITE_API_BASE:-http://localhost:8080}
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8080}
       - VITE_APP_NAME=${REACT_APP_NAME:-CloudWeb}
     command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0 --port 5173"
     depends_on:
       - backend
 
   # -------------------------
-  # OSM IMPORT (doit finir avant OSM Server)
+  # OSM IMPORT (automatique au premier lancement uniquement)
   # -------------------------
   osm-import:
     image: overv/openstreetmap-tile-server
     container_name: osm_import
+    entrypoint: ["/bin/sh", "-c"]
     volumes:
       - ./Osm-server/data/madagascar.osm.pbf:/data/region.osm.pbf
       - osm_data:/data/database
     environment:
       - SKIP_EXTERNAL_DATA=true
-    command: import
+    command:
+      - if [ -f /data/database/planet-import-complete ]; then echo "OSM deja importe, import ignore."; else /run.sh import; fi
     restart: "no"
 
   # -------------------------

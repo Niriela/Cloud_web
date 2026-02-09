@@ -1,3 +1,4 @@
 /Front/node_modules
 /Back/target
-cloud-web-mobile-firebase-adminsdk-fbsvc-11be2809cc.json
+/secrets/
+*firebase-adminsdk*.json

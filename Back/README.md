@@ -4,8 +4,7 @@ Backend API pour l'application Cloud Web utilisant Spring Boot 3.2.1 et Java 21.
 
 ## Configuration requise
 
-- Java 21
-- Maven 3.9+
+- Docker + Docker Compose
 
 ## Structure du projet
 
@@ -20,11 +19,10 @@ src/main/java/com/cloudweb/
 └── CloudWebApplication.java
 ```
 
-## Démarrage
+## Démarrage (Docker)
 
 ```bash
-mvn clean install
-mvn spring-boot:run
+docker compose up -d
 ```
 
 L'API sera disponible sur `http://localhost:8080/api`
@@ -38,7 +36,7 @@ L'API sera disponible sur `http://localhost:8080/api`
 
 ## Configuration
 
-Les paramètres sont définis dans `application.yml`:
+Les paramètres sont définis dans `application.yml` et `application-docker.yml`:
 - Port: 8080
-- Base de données: H2 (en mémoire)
+- Base de données: PostgreSQL (conteneur Docker)
 - Secret JWT: À modifier en production
