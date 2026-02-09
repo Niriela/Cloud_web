@@ -38,6 +38,7 @@ public class FirebaseSyncController {
         try {
             Map<String, Long> localCountsBefore = firebaseSyncService.getLocalCounts();
             Map<String, Long> remoteCountsBefore = firebaseSyncService.getRemoteCounts();
+            firebaseSyncService.mergeUsersFromFirebase();
             firebaseSyncService.mergeSignalementsFromFirebase();
             Map<String, Long> localCountsAfterMerge = firebaseSyncService.getLocalCounts();
             firebaseSyncService.pushAllToFirebase();

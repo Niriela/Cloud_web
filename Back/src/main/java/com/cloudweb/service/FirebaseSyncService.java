@@ -349,12 +349,22 @@ public class FirebaseSyncService {
 
     public void mergeSignalementsFromFirebase() {
         try {
-            // Import points first so signalements with point_id can be resolved locally.
             syncPoints();
             syncSignalements();
         } catch (InterruptedException | ExecutionException ex) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Signalements merge from Firebase failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    public void mergeUsersFromFirebase() {
+        try {
+            syncStatutsUser();
+            syncUserTypes();
+            syncUsers();
+        } catch (InterruptedException | ExecutionException ex) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Users merge from Firebase failed: " + ex.getMessage(), ex);
         }
     }
 
