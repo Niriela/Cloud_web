@@ -36,14 +36,17 @@ public class FirebaseSyncController {
     @PostMapping("/refresh")
     public ResponseEntity<Map<String, Object>> refresh() {
         try {
-            Map<String, Long> localCounts = firebaseSyncService.getLocalCounts();
+            Map<String, Long> localCountsBefore = firebaseSyncService.getLocalCounts();
             Map<String, Long> remoteCountsBefore = firebaseSyncService.getRemoteCounts();
+            firebaseSyncService.mergeSignalementsFromFirebase();
+            Map<String, Long> localCountsAfterMerge = firebaseSyncService.getLocalCounts();
             firebaseSyncService.pushAllToFirebase();
             Map<String, Long> remoteCountsAfter = firebaseSyncService.getRemoteCounts();
             return ResponseEntity.ok(Map.of(
                     "status", "ok",
                     "action", "refresh",
-                    "localCounts", localCounts,
+                    "localCountsBefore", localCountsBefore,
+                    "localCountsAfterMerge", localCountsAfterMerge,
                     "remoteCountsBefore", remoteCountsBefore,
                     "remoteCountsAfter", remoteCountsAfter
             ));
