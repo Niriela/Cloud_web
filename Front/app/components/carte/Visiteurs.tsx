@@ -88,6 +88,13 @@ const typeMapping: Record<string, PointType> = {
 const normalizeLabel = (label?: string | null) =>
   (label ?? "").trim().toLowerCase();
 
+const normalizePercent = (value?: number | null) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, value));
+};
+
 const resolveType = (label?: string | null): PointType => {
   const key = normalizeLabel(label);
   return typeMapping[key] ?? "travaux";
@@ -298,6 +305,8 @@ export default function Visiteurs() {
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [signalements]);
 
+  const advancementPercent = normalizePercent(stats?.advancementPercent ?? 0);
+
   return (
     <div className="flex h-screen w-full overflow-hidden gap-4 p-4">
       {/* Modal pour les photos */}
@@ -460,7 +469,18 @@ export default function Visiteurs() {
             <div>Nombre de points: {stats?.totalPoints ?? 0}</div>
             <div>Surface totale: {stats?.totalSurface ?? 0} m²</div>
             <div>Budget total: {stats?.totalBudget ?? 0}</div>
-            <div>Avancement: {stats ? stats.advancementPercent.toFixed(1) : 0}%</div>
+          </div>
+          <div className="mt-3">
+            <div className="mb-1 flex items-center justify-between text-xs text-gray-700">
+              <span>Avancement</span>
+              <span className="font-semibold">{advancementPercent.toFixed(1)}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                style={{ width: `${advancementPercent}%` }}
+              />
+            </div>
           </div>
         </div>
         <div className="space-y-3">
