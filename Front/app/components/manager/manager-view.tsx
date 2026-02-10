@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getEntreprises,
   getSignalements,
+  getSignalementsStats,
   getStatuts,
   getTypeSignalements,
   deleteSignalement,
   updateSignalement,
   type Entreprise,
   type SignalementMapDto,
+  type SignalementsStats,
   type Statut,
   type TypeSignalement,
 } from "~/lib/api";
@@ -50,6 +52,13 @@ const normalizeLabel = (value?: string | null) =>
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
+const normalizePercent = (value?: number | null) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, value));
+};
+
 const withLookups = (
   items: SignalementMapDto[],
   statuts: Statut[],
@@ -82,6 +91,7 @@ const withLookups = (
 
 export default function ManagerView() {
   const [signalements, setSignalements] = useState<SignalementMapDto[]>([]);
+  const [stats, setStats] = useState<SignalementsStats | null>(null);
   const [statuts, setStatuts] = useState<Statut[]>([]);
   const [entreprises, setEntreprises] = useState<Entreprise[]>([]);
   const [types, setTypes] = useState<TypeSignalement[]>([]);
@@ -96,11 +106,12 @@ export default function ManagerView() {
     setIsLoading(true);
     Promise.all([
       getSignalements(),
+      getSignalementsStats(),
       getStatuts(),
       getEntreprises(),
       getTypeSignalements(),
     ])
-      .then(([signalementsData, statutsData, entreprisesData, typesData]) => {
+      .then(([signalementsData, statsData, statutsData, entreprisesData, typesData]) => {
         if (!active) return;
         const normalized = withLookups(
           signalementsData,
@@ -109,6 +120,7 @@ export default function ManagerView() {
           typesData,
         );
         setSignalements(normalized);
+        setStats(statsData);
         setStatuts(statutsData);
         setEntreprises(entreprisesData);
         setTypes(typesData);
@@ -127,6 +139,15 @@ export default function ManagerView() {
       active = false;
     };
   }, []);
+
+  const refreshStats = async () => {
+    try {
+      const statsData = await getSignalementsStats();
+      setStats(statsData);
+    } catch {
+      // Ignore stats refresh error to keep CRUD usable.
+    }
+  };
 
   const handleDraftChange = (
     id: number,
@@ -162,6 +183,7 @@ export default function ManagerView() {
         ...prev,
         [id]: buildDrafts([updated])[updated.id],
       }));
+      await refreshStats();
     } catch {
       setError("Impossible de sauvegarder le signalement.");
     } finally {
@@ -180,6 +202,7 @@ export default function ManagerView() {
         delete next[id];
         return next;
       });
+      await refreshStats();
     } catch {
       setError("Impossible de supprimer le signalement.");
     } finally {
@@ -188,6 +211,7 @@ export default function ManagerView() {
   };
 
   const rows = useMemo(() => signalements, [signalements]);
+  const advancementPercent = normalizePercent(stats?.advancementPercent ?? 0);
 
   return (
     <Card>
@@ -196,6 +220,18 @@ export default function ManagerView() {
         <CardDescription>
           Gerez les informations des signalements et les statuts.
         </CardDescription>
+        <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="mb-1 flex items-center justify-between text-xs text-gray-700">
+            <span>Avancement global</span>
+            <span className="font-semibold">{advancementPercent.toFixed(1)}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+              style={{ width: `${advancementPercent}%` }}
+            />
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
