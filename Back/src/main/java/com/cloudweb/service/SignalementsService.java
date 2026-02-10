@@ -10,19 +10,23 @@ import com.cloudweb.entity.PhotoSignalement;
 import com.cloudweb.entity.Point;
 import com.cloudweb.entity.Signalements;
 import com.cloudweb.entity.Statuts;
+import com.cloudweb.entity.StatutsPourcentage;
 import com.cloudweb.entity.TypeSignalement;
 import com.cloudweb.repository.EntrepriseRepository;
 import com.cloudweb.repository.HistoriqueSignalementsRepository;
 import com.cloudweb.repository.PhotoSignalementRepository;
 import com.cloudweb.repository.SignalementsRepository;
 import com.cloudweb.repository.StatutsRepository;
+import com.cloudweb.repository.StatutsPourcentageRepository;
 import com.cloudweb.repository.TypeSignalementRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +38,7 @@ public class SignalementsService {
     private final TypeSignalementRepository typeSignalementRepository;
     private final PhotoSignalementRepository photoSignalementRepository;
     private final HistoriqueSignalementsRepository historiqueSignalementsRepository;
+    private final StatutsPourcentageRepository statutsPourcentageRepository;
 
     public List<SignalementMapDto> getAllForMap(String statusFilter, String typeFilter) {
         return signalementsRepository.findAll()
@@ -59,12 +64,12 @@ public class SignalementsService {
                 .filter(value -> value != null)
                 .mapToDouble(Double::doubleValue)
                 .sum();
+        Map<Long, Integer> percentagesByStatusId = loadStatusPercentages();
         double advancementPercent = totalPoints == 0
                 ? 0.0
                 : items.stream()
                 .map(Signalements::getStatuts)
-                .map(statut -> statut != null ? statut.getLibelle() : null)
-                .mapToDouble(this::progressFromStatus)
+                .mapToDouble(statut -> progressFromStatus(statut, percentagesByStatusId))
                 .average()
                 .orElse(0.0);
 
@@ -214,8 +219,29 @@ public class SignalementsService {
         return new StageDates(dateNouveau, dateEnCours, dateTermine);
     }
 
-    private double progressFromStatus(String status) {
-        String value = normalizeLabel(status);
+    private Map<Long, Integer> loadStatusPercentages() {
+        Map<Long, Integer> mapping = new HashMap<>();
+        for (StatutsPourcentage item : statutsPourcentageRepository.findAll()) {
+            if (item == null || item.getStatuts() == null || item.getStatuts().getId() == null) {
+                continue;
+            }
+            Integer value = item.getPourcentage();
+            if (value == null) {
+                continue;
+            }
+            mapping.put(item.getStatuts().getId(), clampPercentage(value));
+        }
+        return mapping;
+    }
+
+    private double progressFromStatus(Statuts statut, Map<Long, Integer> percentagesByStatusId) {
+        if (statut != null && statut.getId() != null) {
+            Integer configured = percentagesByStatusId.get(statut.getId());
+            if (configured != null) {
+                return configured.doubleValue();
+            }
+        }
+        String value = normalizeLabel(statut != null ? statut.getLibelle() : null);
         if ("termine".equals(value)) {
             return 100.0;
         }
@@ -223,6 +249,16 @@ public class SignalementsService {
             return 50.0;
         }
         return 0.0;
+    }
+
+    private int clampPercentage(int value) {
+        if (value < 0) {
+            return 0;
+        }
+        if (value > 100) {
+            return 100;
+        }
+        return value;
     }
 
     private String normalizeLabel(String value) {

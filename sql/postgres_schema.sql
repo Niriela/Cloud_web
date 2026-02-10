@@ -27,11 +27,13 @@ CREATE TABLE IF NOT EXISTS statuts (
 
 CREATE TABLE IF NOT EXISTS statuts_pourcentage (
     id BIGSERIAL PRIMARY KEY,
-    statuts_id BIGINT,
-    pourcentage INTEGER,
+    statuts_id BIGINT NOT NULL UNIQUE,
+    pourcentage INTEGER NOT NULL,
     updated_at TIMESTAMP,
     CONSTRAINT fk_statuts_pourcentage_statuts
-        FOREIGN KEY (statuts_id) REFERENCES statuts(id)
+        FOREIGN KEY (statuts_id) REFERENCES statuts(id),
+    CONSTRAINT chk_statuts_pourcentage_range
+        CHECK (pourcentage >= 0 AND pourcentage <= 100)
 );
 
 CREATE TABLE IF NOT EXISTS type_signalement (

@@ -2,12 +2,14 @@ package com.cloudweb.config;
 
 import com.cloudweb.entity.ReglesGestion;
 import com.cloudweb.entity.Statuts;
+import com.cloudweb.entity.StatutsPourcentage;
 import com.cloudweb.entity.StatutsUser;
 import com.cloudweb.entity.TypeSignalement;
 import com.cloudweb.entity.User;
 import com.cloudweb.entity.UserType;
 import com.cloudweb.repository.ReglesGestionRepository;
 import com.cloudweb.repository.StatutsRepository;
+import com.cloudweb.repository.StatutsPourcentageRepository;
 import com.cloudweb.repository.StatutsUserRepository;
 import com.cloudweb.repository.TypeSignalementRepository;
 import com.cloudweb.repository.UserRepository;
@@ -30,6 +32,7 @@ public class DatabaseBootstrapRunner implements ApplicationRunner {
     private final UserTypeRepository userTypeRepository;
     private final ReglesGestionRepository reglesGestionRepository;
     private final StatutsRepository statutsRepository;
+    private final StatutsPourcentageRepository statutsPourcentageRepository;
     private final TypeSignalementRepository typeSignalementRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -76,10 +79,14 @@ public class DatabaseBootstrapRunner implements ApplicationRunner {
         ensureRegle("Duree_vie_session", "30");
         ensureRegle("Nombre_tentative_connexion", "3");
 
-        ensureStatut("Nouveau");
-        ensureStatut("En cours");
-        ensureStatut("Terminé");
-        ensureStatut("Annulé");
+        Statuts nouveau = ensureStatut("Nouveau");
+        Statuts enCours = ensureStatut("En cours");
+        Statuts termine = ensureStatut("Terminé");
+        Statuts annule = ensureStatut("Annulé");
+        ensureStatutPourcentage(nouveau, 0);
+        ensureStatutPourcentage(enCours, 50);
+        ensureStatutPourcentage(termine, 100);
+        ensureStatutPourcentage(annule, 0);
 
         ensureTypeSignalement("En construction");
         ensureTypeSignalement("Accident");
@@ -145,6 +152,16 @@ public class DatabaseBootstrapRunner implements ApplicationRunner {
     private Statuts ensureStatut(String libelle) {
         return statutsRepository.findByLibelleIgnoreCase(libelle)
                 .orElseGet(() -> statutsRepository.save(Statuts.builder().libelle(libelle).build()));
+    }
+
+    private void ensureStatutPourcentage(Statuts statut, int pourcentage) {
+        if (statut == null || statut.getId() == null) {
+            return;
+        }
+        StatutsPourcentage entity = statutsPourcentageRepository.findByStatutsId(statut.getId())
+                .orElseGet(() -> StatutsPourcentage.builder().statuts(statut).build());
+        entity.setPourcentage(pourcentage);
+        statutsPourcentageRepository.save(entity);
     }
 
     private TypeSignalement ensureTypeSignalement(String libelle) {

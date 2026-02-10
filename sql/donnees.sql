@@ -41,6 +41,16 @@ INSERT INTO Statuts (id, libelle) VALUES
 (3, 'Terminé'),
 (4, 'Annulé');
 
+INSERT INTO statuts_pourcentage (statuts_id, pourcentage, updated_at)
+VALUES
+((SELECT id FROM statuts WHERE libelle = 'Nouveau' LIMIT 1), 0, CURRENT_TIMESTAMP),
+((SELECT id FROM statuts WHERE libelle = 'En cours' LIMIT 1), 50, CURRENT_TIMESTAMP),
+((SELECT id FROM statuts WHERE libelle = 'Terminé' LIMIT 1), 100, CURRENT_TIMESTAMP),
+((SELECT id FROM statuts WHERE libelle = 'Annulé' LIMIT 1), 0, CURRENT_TIMESTAMP)
+ON CONFLICT (statuts_id) DO UPDATE SET
+    pourcentage = EXCLUDED.pourcentage,
+    updated_at = EXCLUDED.updated_at;
+
 INSERT INTO regles_gestion (id, libelle, valeur) VALUES
 (1, 'Duree_vie_session', '30'),
 (2, 'Nombre_tentative_connexion', '3');
