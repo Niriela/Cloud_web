@@ -23,7 +23,8 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, ClipboardList, Wrench } from "lucide-react";
+import TypesReparations from "./types-reparations";
 
 type Draft = {
   surface: string;
@@ -103,6 +104,7 @@ export default function ManagerView() {
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"signalements" | "types">("signalements");
 
   useEffect(() => {
     let active = true;
@@ -232,22 +234,55 @@ export default function ManagerView() {
         </Link>
       </div>
 
-      {/* Carte principale avec les signalements */}
-      <Card>
-        <CardHeader className="border-b">
-          <CardTitle>Gestion des Signalements</CardTitle>
-          <CardDescription>
-            Gerez les informations des signalements et les statuts.
-          </CardDescription>
-          <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-            <div className="mb-1 flex items-center justify-between text-xs text-gray-700">
-              <span>Avancement global</span>
-              <span className="font-semibold">{advancementPercent.toFixed(1)}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                style={{ width: `${advancementPercent}%` }}
+      {/* Onglets de navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          <button
+            onClick={() => setActiveTab("signalements")}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+              activeTab === "signalements"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            <ClipboardList className="h-5 w-5" />
+            Signalements
+          </button>
+          <button
+            onClick={() => setActiveTab("types")}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+              activeTab === "types"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            <Wrench className="h-5 w-5" />
+            Types de Réparations
+          </button>
+        </nav>
+      </div>
+
+      {/* Contenu des onglets */}
+      {activeTab === "types" ? (
+        <TypesReparations />
+      ) : (
+        <>
+          {/* Carte principale avec les signalements */}
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle>Gestion des Signalements</CardTitle>
+              <CardDescription>
+                Gerez les informations des signalements et les statuts.
+              </CardDescription>
+              <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="mb-1 flex items-center justify-between text-xs text-gray-700">
+                  <span>Avancement global</span>
+                  <span className="font-semibold">{advancementPercent.toFixed(1)}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                    style={{ width: `${advancementPercent}%` }}
               />
             </div>
           </div>
@@ -460,6 +495,8 @@ export default function ManagerView() {
           </CardContent>
         </Card>
       </div>
+        </>
+      )}
     </div>
   );
 }

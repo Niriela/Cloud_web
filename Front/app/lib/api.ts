@@ -81,6 +81,18 @@ export type SignalementMapDto = {
 export type TypeSignalement = {
   id: number;
   libelle: string;
+  niveau: number;
+  prixParM2: number;
+};
+
+export type BudgetCalculation = {
+  typeSignalementId: number;
+  typeSignalementLibelle: string;
+  niveau: number;
+  prixParM2: number;
+  surfaceM2: number;
+  budgetEstime: number;
+  formule: string;
 };
 
 export type Statut = {
@@ -154,6 +166,51 @@ export function getSignalements(filters?: { status?: string; type?: string }) {
 
 export function getTypeSignalements() {
   return apiRequest<TypeSignalement[]>("/api/type-signalements");
+}
+
+export function getTypeSignalementsDto() {
+  return apiRequest<TypeSignalement[]>("/api/type-signalements/dto");
+}
+
+export function getTypeSignalementById(id: number) {
+  return apiRequest<TypeSignalement>(`/api/type-signalements/${id}`);
+}
+
+export function createTypeSignalement(payload: {
+  libelle: string;
+  niveau: number;
+  prixParM2: number;
+}) {
+  return apiRequest<TypeSignalement>("/api/type-signalements", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateTypeSignalement(
+  id: number,
+  payload: {
+    libelle?: string;
+    niveau?: number;
+    prixParM2?: number;
+  }
+) {
+  return apiRequest<TypeSignalement>(`/api/type-signalements/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteTypeSignalement(id: number) {
+  return apiRequest<{ message: string }>(`/api/type-signalements/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function calculateBudget(typeId: number, surface: number) {
+  return apiRequest<BudgetCalculation>(
+    `/api/type-signalements/${typeId}/budget?surface=${surface}`
+  );
 }
 
 export function getStatuts() {
