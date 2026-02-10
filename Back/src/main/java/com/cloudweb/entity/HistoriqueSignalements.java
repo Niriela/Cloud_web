@@ -1,13 +1,6 @@
 package com.cloudweb.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,11 +19,11 @@ public class HistoriqueSignalements {
     private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "signalements_id")
+    @JoinColumn(name = "signalements_id", nullable = false)
     private Signalements signalements;
 
     @ManyToOne
-    @JoinColumn(name = "statuts_id")
+    @JoinColumn(name = "statuts_id", nullable = false)
     private Statuts statuts;
 
     private LocalDateTime date;
@@ -39,6 +32,9 @@ public class HistoriqueSignalements {
 
     @PrePersist
     protected void onCreate() {
+        if (date == null) {
+            date = LocalDateTime.now();
+        }
         if (updatedAt == null) {
             updatedAt = LocalDateTime.now();
         }

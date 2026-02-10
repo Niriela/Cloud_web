@@ -1,19 +1,14 @@
 package com.cloudweb.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Data
@@ -51,6 +46,11 @@ public class Signalements {
     @ManyToOne
     @JoinColumn(name = "entreprise_id")
     private Entreprise entreprise;
+
+    // Ajoutez cette relation
+    @OneToMany(mappedBy = "signalements", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @Builder.Default
+    private List<HistoriqueSignalements> historiqueSignalements = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {
