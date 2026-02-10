@@ -101,11 +101,14 @@ CREATE TABLE IF NOT EXISTS signalements (
 CREATE TABLE IF NOT EXISTS photos (
     id BIGSERIAL PRIMARY KEY,
     signalements_id BIGINT,
-    nom_fichier VARCHAR(255),
+    url TEXT,
     updated_at TIMESTAMP,
     CONSTRAINT fk_photos_signalements
         FOREIGN KEY (signalements_id) REFERENCES signalements(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_photos_signalements_id
+    ON photos(signalements_id);
 
 CREATE TABLE IF NOT EXISTS historique_signalements (
     id BIGSERIAL PRIMARY KEY,
