@@ -14,7 +14,7 @@ services:
       - "${DB_HOST_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d
+      - ./sql/postgres_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
       interval: 10s
@@ -93,7 +93,18 @@ services:
     environment:
       - SKIP_EXTERNAL_DATA=true
     command:
-      - if [ -f /data/database/planet-import-complete ]; then echo "OSM deja importe, import ignore."; else /run.sh import; fi
+      - |
+        if [ -f /data/database/planet-import-complete ]; then
+          echo "OSM deja importe, import ignore."
+        else
+          echo "Demarrage import OSM..."
+          if /run.sh import; then
+            echo "Import OSM termine avec succes."
+          else
+            echo "Import OSM en erreur, stack Docker continue sans bloquer."
+            exit 0
+          fi
+        fi
     restart: "no"
 
   # -------------------------
