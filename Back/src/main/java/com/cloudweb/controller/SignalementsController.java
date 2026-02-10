@@ -1,5 +1,6 @@
 package com.cloudweb.controller;
 
+import com.cloudweb.dto.PhotoSignalementDto;
 import com.cloudweb.dto.SignalementMapDto;
 import com.cloudweb.dto.SignalementUpdateRequest;
 import com.cloudweb.dto.SignalementsStatsDto;
@@ -40,6 +41,11 @@ public class SignalementsController {
             @RequestParam(required = false) String type
     ) {
         return ResponseEntity.ok(signalementsService.getStats(status, type));
+    }
+
+    @GetMapping("/{id}/photos")
+    public ResponseEntity<List<PhotoSignalementDto>> photos(@PathVariable Long id) {
+        return ResponseEntity.ok(signalementsService.getPhotosBySignalementId(id));
     }
 
     @PatchMapping("/{id}")

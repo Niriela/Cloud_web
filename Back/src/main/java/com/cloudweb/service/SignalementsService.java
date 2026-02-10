@@ -1,14 +1,17 @@
 package com.cloudweb.service;
 
+import com.cloudweb.dto.PhotoSignalementDto;
 import com.cloudweb.dto.SignalementMapDto;
 import com.cloudweb.dto.SignalementsStatsDto;
 import com.cloudweb.dto.SignalementUpdateRequest;
 import com.cloudweb.entity.Entreprise;
+import com.cloudweb.entity.PhotoSignalement;
 import com.cloudweb.entity.Point;
 import com.cloudweb.entity.Signalements;
 import com.cloudweb.entity.Statuts;
 import com.cloudweb.entity.TypeSignalement;
 import com.cloudweb.repository.EntrepriseRepository;
+import com.cloudweb.repository.PhotoSignalementRepository;
 import com.cloudweb.repository.SignalementsRepository;
 import com.cloudweb.repository.StatutsRepository;
 import com.cloudweb.repository.TypeSignalementRepository;
@@ -26,6 +29,7 @@ public class SignalementsService {
     private final StatutsRepository statutsRepository;
     private final EntrepriseRepository entrepriseRepository;
     private final TypeSignalementRepository typeSignalementRepository;
+    private final PhotoSignalementRepository photoSignalementRepository;
 
     public List<SignalementMapDto> getAllForMap(String statusFilter, String typeFilter) {
         return signalementsRepository.findAll()
@@ -64,6 +68,16 @@ public class SignalementsService {
                 .totalBudget(totalBudget)
                 .advancementPercent(advancementPercent)
                 .build();
+    }
+
+    public List<PhotoSignalementDto> getPhotosBySignalementId(Long signalementId) {
+        if (!signalementsRepository.existsById(signalementId)) {
+            throw new RuntimeException("Signalement not found");
+        }
+        return photoSignalementRepository.findBySignalementsIdOrderByIdAsc(signalementId)
+                .stream()
+                .map(this::toPhotoDto)
+                .toList();
     }
 
     public SignalementMapDto updateSignalement(Long id, SignalementUpdateRequest request) {
@@ -122,6 +136,14 @@ public class SignalementsService {
                 .entreprise(entreprise != null ? entreprise.getName() : null)
                 .typeSignalementId(type != null ? type.getId() : null)
                 .typeSignalement(type != null ? type.getLibelle() : null)
+                .build();
+    }
+
+    private PhotoSignalementDto toPhotoDto(PhotoSignalement photoSignalement) {
+        return PhotoSignalementDto.builder()
+                .id(photoSignalement.getId())
+                .url(photoSignalement.getUrl())
+                .updatedAt(photoSignalement.getUpdatedAt())
                 .build();
     }
 
