@@ -40,6 +40,7 @@ public class Signalements {
     private LocalDateTime date;
     private Double surface;
     private Double budget;
+    private String description;
 
     private LocalDateTime updatedAt;
 

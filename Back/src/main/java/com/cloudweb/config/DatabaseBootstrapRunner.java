@@ -40,7 +40,7 @@ public class DatabaseBootstrapRunner implements ApplicationRunner {
     @Value("${app.bootstrap.seed-default-manager:true}")
     private boolean seedDefaultManager;
 
-    @Value("${app.bootstrap.manager-email:manager@example.com}")
+    @Value("${app.bootstrap.manager-email:manager@gmail.com}")
     private String managerEmail;
 
     @Value("${app.bootstrap.manager-password:123456}")

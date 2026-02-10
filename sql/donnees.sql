@@ -3,7 +3,7 @@
 - Statuts (id, libelle)
 - Point (id, latitude, longitude)
 - Type_signalement (id, libelle)
-- Signalements (id, user_id, point_id, type_signalement_id, date, surface, budget, statuts_id, entreprise_id)
+- Signalements (id, user_id, point_id, type_signalement_id, date, surface, budget, description, statuts_id, entreprise_id)
 - Historique_signalements (id, signalements_id, statuts_id, date)
 - Regles_gestion(id, libelle, valeur)
 - Statuts_user (id, libelle)
@@ -97,7 +97,7 @@ WITH canonical AS (
     MIN(id) OVER (
       PARTITION BY
         point_id, type_signalement_id, user_id, date,
-        surface, budget, entreprise_id, statuts_id
+        surface, budget, description, entreprise_id, statuts_id
     ) AS keep_id
   FROM signalements
 )

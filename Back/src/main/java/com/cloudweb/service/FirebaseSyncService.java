@@ -288,6 +288,7 @@ public class FirebaseSyncService {
             data.put("date", signalement.getDate() != null ? signalement.getDate().toString() : null);
             data.put("surface", signalement.getSurface());
             data.put("budget", signalement.getBudget());
+            data.put("description", signalement.getDescription());
             data.put("statuts_id", signalement.getStatuts() != null ? signalement.getStatuts().getId() : null);
             data.put("entreprise_id",
                     signalement.getEntreprise() != null ? signalement.getEntreprise().getId() : null);
@@ -751,6 +752,7 @@ public class FirebaseSyncService {
 
                 Double surface = getDouble(doc, "surface");
                 Double budget = getDouble(doc, "budget");
+                String description = getString(doc, "description");
 
                 LocalDateTime createdAt = getDate(doc, "created_at");
                 if (createdAt == null) {
@@ -863,6 +865,9 @@ public class FirebaseSyncService {
                 if (budget != null) {
                     signalement.setBudget(budget);
                 }
+                if (description != null) {
+                    signalement.setDescription(description);
+                }
                 if (createdAt != null) {
                     signalement.setDate(createdAt);
                 }
@@ -908,10 +913,11 @@ public class FirebaseSyncService {
                             date,
                             surface,
                             budget,
+                            description,
                             updated_at,
                             statuts_id,
                             entreprise_id
-                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         on conflict (id) do update set
                             user_id = excluded.user_id,
                             point_id = excluded.point_id,
@@ -919,6 +925,7 @@ public class FirebaseSyncService {
                             date = excluded.date,
                             surface = excluded.surface,
                             budget = excluded.budget,
+                            description = excluded.description,
                             updated_at = excluded.updated_at,
                             statuts_id = excluded.statuts_id,
                             entreprise_id = excluded.entreprise_id
@@ -930,6 +937,7 @@ public class FirebaseSyncService {
                 signalement.getDate(),
                 signalement.getSurface(),
                 signalement.getBudget(),
+                signalement.getDescription(),
                 signalement.getUpdatedAt(),
                 signalement.getStatuts() != null ? signalement.getStatuts().getId() : null,
                 signalement.getEntreprise() != null ? signalement.getEntreprise().getId() : null

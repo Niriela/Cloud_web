@@ -115,6 +115,7 @@ public class SignalementsService {
                 .date(signalement.getDate())
                 .surface(signalement.getSurface())
                 .budget(signalement.getBudget())
+                .description(signalement.getDescription())
                 .statutsId(statuts != null ? statuts.getId() : null)
                 .statut(statuts != null ? statuts.getLibelle() : null)
                 .entrepriseId(entreprise != null ? entreprise.getId() : null)

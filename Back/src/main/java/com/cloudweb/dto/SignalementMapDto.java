@@ -18,6 +18,7 @@ public class SignalementMapDto {
     private LocalDateTime date;
     private Double surface;
     private Double budget;
+    private String description;
     private Long statutsId;
     private String statut;
     private Long entrepriseId;

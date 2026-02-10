@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS users (
         FOREIGN KEY (user_type_id) REFERENCES user_type(id)
 );
 
-CREATE TABLE IF NOT EXISTS signalemaents (
+CREATE TABLE IF NOT EXISTS signalements (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT,
     point_id BIGINT,
@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS signalemaents (
     date TIMESTAMP,
     surface DOUBLE PRECISION,
     budget DOUBLE PRECISION,
+    description TEXT,
     updated_at TIMESTAMP,
     statuts_id BIGINT,
     entreprise_id BIGINT,
