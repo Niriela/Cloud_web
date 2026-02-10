@@ -16,7 +16,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/stats/delais")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class DelaisStatsController {
 
     private final DelaisStatsGlobalService delaisStatsGlobalService;

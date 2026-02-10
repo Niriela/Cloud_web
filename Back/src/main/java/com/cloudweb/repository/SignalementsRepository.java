@@ -34,8 +34,8 @@ public interface SignalementsRepository extends JpaRepository<Signalements, Long
                                 s.description,
                                 ts.libelle,
                                 st.libelle,
-                                EXTRACT(DAY FROM (CURRENT_TIMESTAMP - s.date)),
-                                EXTRACT(DAY FROM (CURRENT_TIMESTAMP - COALESCE(hs.date, s.date))),
+                                cast((timestampdiff(minute, s.date, CURRENT_TIMESTAMP) + 1439) / 1440 as integer),
+                                cast((timestampdiff(minute, COALESCE(hs.date, s.date), CURRENT_TIMESTAMP) + 1439) / 1440 as integer),
                                 e.name,
                                 TO_CHAR(s.date, 'DD/MM/YYYY'),
                                 TO_CHAR(s.updatedAt, 'DD/MM/YYYY HH24:MI')
@@ -45,10 +45,12 @@ public interface SignalementsRepository extends JpaRepository<Signalements, Long
                             LEFT JOIN s.statuts st
                             LEFT JOIN s.entreprise e
                             LEFT JOIN HistoriqueSignalements hs ON hs.signalements.id = s.id
+                                AND hs.statuts.id = st.id
                                 AND hs.date = (
                                     SELECT MAX(hs2.date)
                                     FROM HistoriqueSignalements hs2
                                     WHERE hs2.signalements.id = s.id
+                                    AND hs2.statuts.id = st.id
                                 )
                             WHERE s.statuts.id IS NOT NULL
                             ORDER BY s.date DESC
@@ -62,8 +64,8 @@ public interface SignalementsRepository extends JpaRepository<Signalements, Long
                                 s.description,
                                 ts.libelle,
                                 st.libelle,
-                                EXTRACT(DAY FROM (CURRENT_TIMESTAMP - s.date)),
-                                EXTRACT(DAY FROM (CURRENT_TIMESTAMP - COALESCE(hs.date, s.date))),
+                                cast((timestampdiff(minute, s.date, CURRENT_TIMESTAMP) + 1439) / 1440 as integer),
+                                cast((timestampdiff(minute, COALESCE(hs.date, s.date), CURRENT_TIMESTAMP) + 1439) / 1440 as integer),
                                 e.name,
                                 TO_CHAR(s.date, 'DD/MM/YYYY'),
                                 TO_CHAR(s.updatedAt, 'DD/MM/YYYY HH24:MI')
@@ -73,10 +75,12 @@ public interface SignalementsRepository extends JpaRepository<Signalements, Long
                             LEFT JOIN s.statuts st
                             LEFT JOIN s.entreprise e
                             LEFT JOIN HistoriqueSignalements hs ON hs.signalements.id = s.id
+                                AND hs.statuts.id = st.id
                                 AND hs.date = (
                                     SELECT MAX(hs2.date)
                                     FROM HistoriqueSignalements hs2
                                     WHERE hs2.signalements.id = s.id
+                                    AND hs2.statuts.id = st.id
                                 )
                             WHERE (:typeId IS NULL OR ts.id = :typeId)
                             AND (:statutId IS NULL OR st.id = :statutId)

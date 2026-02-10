@@ -16,7 +16,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/delais")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class DelaiTraitementController {
 
     private final DelaiTraitementService delaiTraitementService;

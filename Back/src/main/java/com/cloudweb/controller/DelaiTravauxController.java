@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @RestController
 @RequestMapping("/api/delais-travaux")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class DelaiTravauxController {
 
     private final DelaiTravauxService delaiTravauxService;
