@@ -2,3 +2,4 @@
 /Back/target
 features.txt
 *firebase-adminsdk*.json
+docker-images-cache/
