@@ -223,3 +223,17 @@ export function syncFirebase() {
     method: "POST",
   });
 }
+
+// Ajouter ces types dans api.ts
+export type PhotoSignalementDto = {
+  id: number;
+  url: string;
+  updatedAt: string | null;
+};
+
+// Ajouter cette fonction pour récupérer les photos
+export function getSignalementPhotos(id: number) {
+  return apiRequest<PhotoSignalementDto[]>(`/api/signalements/${id}/photos`, {
+    method: "GET",
+  });
+}modal.tsx

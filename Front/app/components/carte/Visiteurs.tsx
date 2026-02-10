@@ -7,11 +7,23 @@ import {
   getSignalements,
   getSignalementsStats,
   getTypeSignalements,
+  getSignalementPhotos,
   type SignalementMapDto,
   type SignalementsStats,
   type TypeSignalement,
+  type PhotoSignalementDto,
 } from "~/lib/api";
 import { useEffect, useMemo, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "~/components/ui/modal";
+import { Button } from "~/components/ui/button";
+import { EmptyState } from "~/components/ui/empty-state";
 
 const { BaseLayer } = LayersControl;
 
@@ -81,6 +93,128 @@ const resolveType = (label?: string | null): PointType => {
   return typeMapping[key] ?? "travaux";
 };
 
+// Composant pour la galerie de photos
+function PhotoGallery({ 
+  signalementId, 
+  signalementType 
+}: { 
+  signalementId: number; 
+  signalementType: string;
+}) {
+  const [photos, setPhotos] = useState<PhotoSignalementDto[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [photoCount, setPhotoCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (signalementId) {
+      setIsLoading(true);
+      setError(null);
+      getSignalementPhotos(signalementId)
+        .then((fetchedPhotos) => {
+          setPhotos(fetchedPhotos);
+          setPhotoCount(fetchedPhotos.length);
+        })
+        .catch((err) => {
+          console.error("Erreur lors du chargement des photos:", err);
+          setError("Impossible de charger les photos.");
+          setPhotoCount(0);
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [signalementId]);
+
+  return (
+    <div className="photo-gallery">
+      <div className="mb-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">
+            Photos du signalement: {signalementType}
+          </h3>
+          {photoCount > 0 && (
+            <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+              {photoCount} photo{photoCount > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 p-2 rounded mt-2">{error}</p>
+        )}
+      </div>
+      
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center h-40 space-y-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="text-gray-500">Chargement des photos...</p>
+        </div>
+      ) : photoCount === 0 ? (
+        <EmptyState
+          title="Aucune photo disponible"
+          description="Ce signalement n'a pas encore de photos associées. Les photos seront ajoutées par l'équipe de gestion."
+          icon={
+            <div className="mx-auto w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 border-2 border-gray-300">
+              <svg 
+                className="h-8 w-8 text-gray-400" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={1.5} 
+                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" 
+                />
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={1.5} 
+                  d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" 
+                />
+              </svg>
+            </div>
+          }
+          action={
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button variant="outline" className="gap-2">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Signaler l'absence de photos
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto p-1">
+          {photos.map((photo) => (
+            <div key={photo.id} className="photo-item">
+              <div className="border rounded-lg overflow-hidden bg-gray-50">
+                <img
+                  src={photo.url}
+                  alt={`Photo du signalement ${signalementId}`}
+                  className="w-full h-48 object-cover hover:opacity-90 transition-opacity"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = "https://via.placeholder.com/300x200?text=Image+Non+Disponible";
+                  }}
+                />
+                <div className="p-3 bg-white">
+                  <p className="text-xs text-gray-500">
+                    {photo.updatedAt 
+                      ? new Date(photo.updatedAt).toLocaleDateString('fr-FR')
+                      : 'Date inconnue'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Visiteurs() {
   const [signalements, setSignalements] = useState<SignalementMapDto[]>([]);
   const [typeSignalements, setTypeSignalements] = useState<TypeSignalement[]>([]);
@@ -89,6 +223,23 @@ export default function Visiteurs() {
   const [selectedType, setSelectedType] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // États pour la galerie de photos
+  const [selectedSignalementId, setSelectedSignalementId] = useState<number | null>(null);
+  const [selectedSignalementType, setSelectedSignalementType] = useState<string>("");
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+
+  const openPhotoGallery = (signalementId: number, signalementType: string) => {
+    setSelectedSignalementId(signalementId);
+    setSelectedSignalementType(signalementType);
+    setShowPhotoModal(true);
+  };
+
+  const closePhotoGallery = () => {
+    setShowPhotoModal(false);
+    setSelectedSignalementId(null);
+    setSelectedSignalementType("");
+  };
 
   useEffect(() => {
     let active = true;
@@ -149,6 +300,29 @@ export default function Visiteurs() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden gap-4 p-4">
+      {/* Modal pour les photos */}
+      <Dialog open={showPhotoModal} onOpenChange={setShowPhotoModal}>
+        <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Photos du signalement</DialogTitle>
+            <DialogDescription>
+              Visualisez les photos associées à ce signalement
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSignalementId && (
+            <PhotoGallery 
+              signalementId={selectedSignalementId} 
+              signalementType={selectedSignalementType}
+            />
+          )}
+          <div className="flex justify-end pt-4 border-t">
+            <Button variant="outline" onClick={closePhotoGallery}>
+              Fermer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Carte - 75% */}
       <div className="flex-1 rounded-lg overflow-hidden bg-gray-100">
         <MapContainer
@@ -172,44 +346,67 @@ export default function Visiteurs() {
               icon={getIconForType(resolveType(p.typeSignalement))}
             >
               <Tooltip direction="top" offset={[0, -10]} opacity={0.9} sticky>
-                <div className="text-xs">
+                <div className="text-xs min-w-[200px]">
                   <div className="font-semibold">{p.typeSignalement ?? "Signalement"}</div>
-                  <div>Status: {p.statut ?? "-"}</div>
-                  <div>Surface: {p.surface ?? "-"} m²</div>
-                  <div>Budget: {p.budget ?? "-"}</div>
-                  <div>Entreprise: {p.entreprise ?? "-"}</div>
-                  {/* Ajouter cette ligne pour le lien Voir les photos */}
-                  <div className="mt-1">
-                    <a 
-                      href={`/signalements/${p.id}/photos`} 
-                      className="text-blue-600 hover:underline text-xs"
-                      onClick={(e) => e.stopPropagation()} // Empêche la fermeture du tooltip
+                  <div className="mt-1 space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status:</span>
+                      <span>{p.statut ?? "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Surface:</span>
+                      <span>{p.surface ?? "-"} m²</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Budget:</span>
+                      <span>{p.budget ?? "-"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Entreprise:</span>
+                      <span>{p.entreprise ?? "-"}</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-2 border-t">
+                    <button
+                      onClick={() => openPhotoGallery(p.id, p.typeSignalement || "Signalement")}
+                      className="w-full text-left text-blue-600 hover:text-blue-800 hover:underline text-xs font-medium flex items-center justify-between gap-1 group"
                     >
-                      📸 Voir les photos
-                    </a>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm group-hover:scale-110 transition-transform">📸</span>
+                        <span>Voir les photos</span>
+                      </div>
+                      <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full">
+                        ?
+                      </span>
+                    </button>
                   </div>
                 </div>
               </Tooltip>
               <Popup>
-                <strong>{p.typeSignalement ?? "Signalement"}</strong>
-                <br />
-                Date: {p.date ?? "-"}
-                <br />
-                Statut: {p.statut ?? "-"}
-                <br />
-                Surface: {p.surface ?? "-"} m²
-                <br />
-                Budget: {p.budget ?? "-"}
-                <br />
-                Entreprise: {p.entreprise ?? "-"}
-                {/* Ajouter cette ligne pour le lien Voir les photos */}
-                <br />
-                <a 
-                  href={`/signalements/${p.id}/photos`} 
-                  className="text-blue-600 hover:underline"
-                >
-                  📸 Voir les photos
-                </a>
+                <div className="popup-content">
+                  <strong className="text-base">{p.typeSignalement ?? "Signalement"}</strong>
+                  <div className="mt-2 space-y-1 text-sm">
+                    <div><span className="font-medium">Date:</span> {p.date ?? "-"}</div>
+                    <div><span className="font-medium">Statut:</span> {p.statut ?? "-"}</div>
+                    <div><span className="font-medium">Surface:</span> {p.surface ?? "-"} m²</div>
+                    <div><span className="font-medium">Budget:</span> {p.budget ?? "-"}</div>
+                    <div><span className="font-medium">Entreprise:</span> {p.entreprise ?? "-"}</div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t">
+                    <button
+                      onClick={() => openPhotoGallery(p.id, p.typeSignalement || "Signalement")}
+                      className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-sm font-medium flex items-center justify-between transition-colors group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base group-hover:scale-110 transition-transform">📸</span>
+                        <span>Voir les photos</span>
+                      </div>
+                      <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                        ?
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </Popup>
             </Marker>
           ))} 
