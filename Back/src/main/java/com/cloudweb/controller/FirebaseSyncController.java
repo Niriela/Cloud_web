@@ -74,8 +74,20 @@ public class FirebaseSyncController {
 
     @PostMapping("/refresh")
     public ResponseEntity<Map<String, Object>> refresh() {
+        FirebaseSyncService firebaseSyncService = firebaseSyncServiceProvider.getIfAvailable();
+        
+        // Mode offline: Firebase désactivé, retourner succès
+        if (firebaseSyncService == null) {
+            log.info("Firebase désactivé - Mode offline actif. Les données sont stockées localement dans PostgreSQL.");
+            return ResponseEntity.ok(Map.of(
+                    "status", "ok",
+                    "action", "refresh",
+                    "mode", "offline",
+                    "message", "Mode hors ligne actif. Données synchronisées localement dans PostgreSQL."
+            ));
+        }
+        
         try {
-            FirebaseSyncService firebaseSyncService = requireFirebaseSyncService();
             Map<String, Long> localCountsBefore = firebaseSyncService.getLocalCounts();
             Map<String, Long> remoteCountsBefore = firebaseSyncService.getRemoteCounts();
             firebaseSyncService.mergeUsersFromFirebase();
@@ -86,15 +98,11 @@ public class FirebaseSyncController {
             return ResponseEntity.ok(Map.of(
                     "status", "ok",
                     "action", "refresh",
+                    "mode", "online",
                     "localCountsBefore", localCountsBefore,
                     "localCountsAfterMerge", localCountsAfterMerge,
                     "remoteCountsBefore", remoteCountsBefore,
                     "remoteCountsAfter", remoteCountsAfter
-            ));
-        } catch (IllegalStateException ex) {
-            return ResponseEntity.status(503).body(Map.of(
-                    "status", "error",
-                    "message", ex.getMessage()
             ));
         } catch (RuntimeException ex) {
             log.error("Firebase sync refresh failed", ex);

@@ -549,6 +549,8 @@ export default function ManagerView() {
           </CardContent>
         </Card>
       </div>
+      </>
+      )}
     </div>
   );
 }
