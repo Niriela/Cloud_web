@@ -178,6 +178,16 @@ export default function Visiteurs() {
                   <div>Surface: {p.surface ?? "-"} m²</div>
                   <div>Budget: {p.budget ?? "-"}</div>
                   <div>Entreprise: {p.entreprise ?? "-"}</div>
+                  {/* Ajouter cette ligne pour le lien Voir les photos */}
+                  <div className="mt-1">
+                    <a 
+                      href={`/signalements/${p.id}/photos`} 
+                      className="text-blue-600 hover:underline text-xs"
+                      onClick={(e) => e.stopPropagation()} // Empêche la fermeture du tooltip
+                    >
+                      📸 Voir les photos
+                    </a>
+                  </div>
                 </div>
               </Tooltip>
               <Popup>
@@ -192,9 +202,17 @@ export default function Visiteurs() {
                 Budget: {p.budget ?? "-"}
                 <br />
                 Entreprise: {p.entreprise ?? "-"}
+                {/* Ajouter cette ligne pour le lien Voir les photos */}
+                <br />
+                <a 
+                  href={`/signalements/${p.id}/photos`} 
+                  className="text-blue-600 hover:underline"
+                >
+                  📸 Voir les photos
+                </a>
               </Popup>
             </Marker>
-          ))}
+          ))} 
         </MapContainer>
       </div>
 

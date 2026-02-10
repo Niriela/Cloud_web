@@ -4,8 +4,8 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/cloud_db
     driverClassName: org.postgresql.Driver
-    username: postgres
-    password: postgres
+    username: rasm
+    password: vaika
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
