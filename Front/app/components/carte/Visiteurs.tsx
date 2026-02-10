@@ -15,13 +15,12 @@ import {
 } from "~/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogTrigger,
-} from "~/components/ui/modal";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "~/components/ui/sheet";
 import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/empty-state";
 
@@ -124,7 +123,14 @@ function PhotoGallery({
         })
         .catch((err) => {
           console.error("Erreur lors du chargement des photos:", err);
-          setError("Impossible de charger les photos.");
+          const message =
+            typeof err === "object" &&
+            err !== null &&
+            "message" in err &&
+            typeof (err as { message?: unknown }).message === "string"
+              ? (err as { message: string }).message
+              : "Impossible de charger les photos.";
+          setError(message);
           setPhotoCount(0);
         })
         .finally(() => setIsLoading(false));
@@ -134,7 +140,7 @@ function PhotoGallery({
   return (
     <div className="photo-gallery">
       <div className="mb-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-lg border bg-slate-50 px-3 py-2">
           <h3 className="text-lg font-semibold">
             Photos du signalement: {signalementType}
           </h3>
@@ -182,31 +188,27 @@ function PhotoGallery({
             </div>
           }
           action={
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button variant="outline" className="gap-2">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Signaler l'absence de photos
-              </Button>
-            </div>
+            null
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto p-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-1">
           {photos.map((photo) => (
             <div key={photo.id} className="photo-item">
-              <div className="border rounded-lg overflow-hidden bg-gray-50">
+              <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
                 <img
                   src={photo.url}
                   alt={`Photo du signalement ${signalementId}`}
-                  className="w-full h-48 object-cover hover:opacity-90 transition-opacity"
+                  className="h-52 w-full object-cover transition-transform duration-300 hover:scale-[1.02]"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.src = "https://via.placeholder.com/300x200?text=Image+Non+Disponible";
                   }}
                 />
-                <div className="p-3 bg-white">
+                <div className="flex items-center justify-between p-3">
+                  <p className="text-xs font-medium text-gray-500">
+                    Photo #{photo.id}
+                  </p>
                   <p className="text-xs text-gray-500">
                     {photo.updatedAt 
                       ? new Date(photo.updatedAt).toLocaleDateString('fr-FR')
@@ -242,10 +244,12 @@ export default function Visiteurs() {
     setShowPhotoModal(true);
   };
 
-  const closePhotoGallery = () => {
-    setShowPhotoModal(false);
-    setSelectedSignalementId(null);
-    setSelectedSignalementType("");
+  const handlePhotoSheetChange = (open: boolean) => {
+    setShowPhotoModal(open);
+    if (!open) {
+      setSelectedSignalementId(null);
+      setSelectedSignalementType("");
+    }
   };
 
   useEffect(() => {
@@ -309,28 +313,26 @@ export default function Visiteurs() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden gap-4 p-4">
-      {/* Modal pour les photos */}
-      <Dialog open={showPhotoModal} onOpenChange={setShowPhotoModal}>
-        <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>Photos du signalement</DialogTitle>
-            <DialogDescription>
-              Visualisez les photos associées à ce signalement
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSignalementId && (
-            <PhotoGallery 
-              signalementId={selectedSignalementId} 
-              signalementType={selectedSignalementType}
-            />
-          )}
-          <div className="flex justify-end pt-4 border-t">
-            <Button variant="outline" onClick={closePhotoGallery}>
-              Fermer
-            </Button>
+      {/* Panneau latéral pour les photos */}
+      <Sheet open={showPhotoModal} onOpenChange={handlePhotoSheetChange}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl p-0">
+          <SheetHeader className="border-b px-6 py-4">
+            <SheetTitle>Photos du signalement</SheetTitle>
+            <SheetDescription>
+              Visualisez les photos associées au signalement
+              {selectedSignalementId ? ` #${selectedSignalementId}` : ""}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="h-[calc(100%-5.5rem)] overflow-y-auto px-6 pb-6">
+            {selectedSignalementId && (
+              <PhotoGallery
+                signalementId={selectedSignalementId}
+                signalementType={selectedSignalementType}
+              />
+            )}
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Carte - 75% */}
       <div className="flex-1 rounded-lg overflow-hidden bg-gray-100">
@@ -358,6 +360,10 @@ export default function Visiteurs() {
                 <div className="text-xs min-w-[200px]">
                   <div className="font-semibold">{p.typeSignalement ?? "Signalement"}</div>
                   <div className="mt-1 space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">ID:</span>
+                      <span>{p.id}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Status:</span>
                       <span>{p.statut ?? "-"}</span>
@@ -395,6 +401,7 @@ export default function Visiteurs() {
                 <div className="popup-content">
                   <strong className="text-base">{p.typeSignalement ?? "Signalement"}</strong>
                   <div className="mt-2 space-y-1 text-sm">
+                    <div><span className="font-medium">ID:</span> {p.id}</div>
                     <div><span className="font-medium">Date:</span> {p.date ?? "-"}</div>
                     <div><span className="font-medium">Statut:</span> {p.statut ?? "-"}</div>
                     <div><span className="font-medium">Surface:</span> {p.surface ?? "-"} m²</div>

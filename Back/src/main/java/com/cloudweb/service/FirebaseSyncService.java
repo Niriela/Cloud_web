@@ -3,6 +3,7 @@ package com.cloudweb.service;
 import com.cloudweb.entity.Entreprise;
 import com.cloudweb.entity.HistoriqueSignalements;
 import com.cloudweb.entity.HistoriqueUsers;
+import com.cloudweb.entity.PhotoSignalement;
 import com.cloudweb.entity.Point;
 import com.cloudweb.entity.ReglesGestion;
 import com.cloudweb.entity.Signalements;
@@ -14,6 +15,7 @@ import com.cloudweb.entity.UserType;
 import com.cloudweb.repository.EntrepriseRepository;
 import com.cloudweb.repository.HistoriqueSignalementsRepository;
 import com.cloudweb.repository.HistoriqueUsersRepository;
+import com.cloudweb.repository.PhotoSignalementRepository;
 import com.cloudweb.repository.PointRepository;
 import com.cloudweb.repository.ReglesGestionRepository;
 import com.cloudweb.repository.SignalementsRepository;
@@ -44,8 +46,10 @@ import java.net.InetAddress;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -69,6 +73,7 @@ public class FirebaseSyncService {
     private final ReglesGestionRepository reglesGestionRepository;
     private final HistoriqueSignalementsRepository historiqueSignalementsRepository;
     private final HistoriqueUsersRepository historiqueUsersRepository;
+    private final PhotoSignalementRepository photoSignalementRepository;
     private final JdbcTemplate jdbcTemplate;
 
     private Map<String, DocumentReference> remotePointByCoord = new HashMap<>();
@@ -279,6 +284,13 @@ public class FirebaseSyncService {
                 continue;
             }
             DocumentReference ref = resolveRemoteSignalementDoc(signalement, batch);
+            List<String> photos = photoSignalementRepository.findBySignalementsIdOrderByIdAsc(signalement.getId())
+                    .stream()
+                    .map(PhotoSignalement::getUrl)
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(url -> !url.isBlank())
+                    .toList();
             Map<String, Object> data = new HashMap<>();
             data.put("id", signalement.getId());
             data.put("user_id", signalement.getUser() != null ? signalement.getUser().getId() : null);
@@ -292,6 +304,7 @@ public class FirebaseSyncService {
             data.put("statuts_id", signalement.getStatuts() != null ? signalement.getStatuts().getId() : null);
             data.put("entreprise_id",
                     signalement.getEntreprise() != null ? signalement.getEntreprise().getId() : null);
+            data.put("photos", photos);
             data.put("updated_at", formatDate(signalement.getUpdatedAt()));
             batch.set(ref, data);
         }
@@ -852,6 +865,9 @@ public class FirebaseSyncService {
                 }
 
                 if (!shouldOverwrite(existing != null ? existing.getUpdatedAt() : null, remoteUpdatedAt)) {
+                    if (existing != null) {
+                        syncSignalementPhotosFromFirestore(existing, doc, remoteUpdatedAt);
+                    }
                     continue;
                 }
 
@@ -888,11 +904,14 @@ public class FirebaseSyncService {
                 }
 
                 signalement.setUpdatedAt(remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now());
+                Signalements persistedSignalement;
                 if (existing == null && id != null) {
                     upsertSignalementWithExplicitId(signalement, id);
+                    persistedSignalement = signalementsRepository.findById(id).orElse(signalement);
                 } else {
-                    signalementsRepository.save(signalement);
+                    persistedSignalement = signalementsRepository.save(signalement);
                 }
+                syncSignalementPhotosFromFirestore(persistedSignalement, doc, remoteUpdatedAt);
             } catch (Exception ex) {
                 log.warn("Skipping signalements {} due to error", doc.getId(), ex);
             }
@@ -1805,6 +1824,61 @@ public class FirebaseSyncService {
             return false;
         }
         return remoteUpdatedAt.isAfter(localUpdatedAt);
+    }
+
+    private void syncSignalementPhotosFromFirestore(
+            Signalements signalement,
+            DocumentSnapshot doc,
+            LocalDateTime remoteUpdatedAt
+    ) {
+        if (signalement == null || signalement.getId() == null || doc == null) {
+            return;
+        }
+        Object rawPhotos = doc.get("photos");
+        if (rawPhotos == null) {
+            return;
+        }
+        if (!(rawPhotos instanceof List<?> photoValues)) {
+            log.warn("Signalement {} has invalid photos format in Firestore doc {}", signalement.getId(), doc.getId());
+            return;
+        }
+
+        List<String> normalizedRemoteUrls = normalizePhotoUrls(photoValues);
+        List<String> localUrls = photoSignalementRepository.findBySignalementsIdOrderByIdAsc(signalement.getId())
+                .stream()
+                .map(PhotoSignalement::getUrl)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(url -> !url.isBlank())
+                .toList();
+        if (localUrls.equals(normalizedRemoteUrls)) {
+            return;
+        }
+
+        photoSignalementRepository.deleteBySignalementsId(signalement.getId());
+        LocalDateTime photoUpdatedAt = remoteUpdatedAt != null ? remoteUpdatedAt : LocalDateTime.now();
+        for (String url : normalizedRemoteUrls) {
+            photoSignalementRepository.save(PhotoSignalement.builder()
+                    .signalements(signalement)
+                    .url(url)
+                    .updatedAt(photoUpdatedAt)
+                    .build());
+        }
+    }
+
+    private List<String> normalizePhotoUrls(List<?> photoValues) {
+        List<String> normalizedUrls = new ArrayList<>();
+        for (Object photoValue : photoValues) {
+            if (photoValue == null) {
+                continue;
+            }
+            String url = photoValue.toString().trim();
+            if (url.isBlank() || normalizedUrls.contains(url)) {
+                continue;
+            }
+            normalizedUrls.add(url);
+        }
+        return normalizedUrls;
     }
 
     private void alignPostgresIdSequences() {

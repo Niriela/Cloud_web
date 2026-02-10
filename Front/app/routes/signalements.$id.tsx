@@ -243,12 +243,6 @@ export default function SignalementDetailPage() {
                         }
                         action={
                           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                            <Button variant="outline" className="gap-2">
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              Signaler l'absence de photos
-                            </Button>
                             <Button asChild variant="ghost" className="gap-2">
                               <Link to="/Visiteurs">
                                 <ArrowLeft className="h-4 w-4" />

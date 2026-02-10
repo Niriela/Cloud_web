@@ -12,7 +12,8 @@ async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = localStorage.getItem("auth_token");
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -236,4 +237,4 @@ export function getSignalementPhotos(id: number) {
   return apiRequest<PhotoSignalementDto[]>(`/api/signalements/${id}/photos`, {
     method: "GET",
   });
-}modal.tsx
+}
