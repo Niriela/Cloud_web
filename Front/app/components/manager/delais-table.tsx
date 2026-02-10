@@ -3,9 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { ChevronUp, ChevronDown, Download, Filter, Calendar } from 'lucide-react';
-import { fetchDelaisTraitement, DelaiTraitement } from '~/lib/api';
+import { ChevronUp, ChevronDown, Download, Filter } from 'lucide-react';
+import { fetchDelaisTraitement, type DelaiTraitement } from '~/lib/api';
 
 interface SortConfig {
   key: keyof DelaiTraitement;
@@ -147,6 +146,14 @@ export default function DelaisTable() {
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = filteredData.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const statusOptions = Array.from(new Set(data.map((item) => item.statutActuel))).filter(Boolean);
+  const entrepriseOptions = Array.from(
+    new Set(
+      data
+        .map((item) => item.entrepriseAssociee)
+        .filter((value) => Boolean(value && value.trim())),
+    ),
+  );
 
   if (loading) {
     return <div>Chargement...</div>;
@@ -192,34 +199,34 @@ export default function DelaisTable() {
           
           <div>
             <label className="text-sm font-medium mb-1 block">Statut</label>
-            <Select onValueChange={(value) => handleFilterChange('statut', value)} value={filters.statut}>
-              <SelectTrigger>
-                <SelectValue placeholder="Tous les statuts" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Tous</SelectItem>
-                <SelectItem value="Nouveau">Nouveau</SelectItem>
-                <SelectItem value="En cours">En cours</SelectItem>
-                <SelectItem value="Terminé">Terminé</SelectItem>
-                <SelectItem value="Annulé">Annulé</SelectItem>
-              </SelectContent>
-            </Select>
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={filters.statut}
+              onChange={(event) => handleFilterChange('statut', event.target.value)}
+            >
+              <option value="">Tous les statuts</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
           </div>
           
           <div>
             <label className="text-sm font-medium mb-1 block">Entreprise</label>
-            <Select onValueChange={(value) => handleFilterChange('entreprise', value)} value={filters.entreprise}>
-              <SelectTrigger>
-                <SelectValue placeholder="Toutes les entreprises" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Toutes</SelectItem>
-                {/* Dynamique : récupérer la liste des entreprises */}
-                <SelectItem value="Entreprise A">Entreprise A</SelectItem>
-                <SelectItem value="Entreprise B">Entreprise B</SelectItem>
-                <SelectItem value="Entreprise C">Entreprise C</SelectItem>
-              </SelectContent>
-            </Select>
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={filters.entreprise}
+              onChange={(event) => handleFilterChange('entreprise', event.target.value)}
+            >
+              <option value="">Toutes les entreprises</option>
+              {entrepriseOptions.map((entreprise) => (
+                <option key={entreprise} value={entreprise}>
+                  {entreprise}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

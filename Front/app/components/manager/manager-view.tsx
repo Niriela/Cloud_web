@@ -29,8 +29,32 @@ type Draft = {
   surface: string;
   budget: string;
   statutsId: string;
+  statutDate: string;
   entrepriseId: string;
   typeSignalementId: string;
+};
+
+const toDateTimeLocalValue = (value?: string | null) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => `${n}`.padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const normalizeStatusLabel = (value?: string | null) =>
+  (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+const inferStatusDate = (item: SignalementMapDto) => {
+  const normalized = normalizeStatusLabel(item.statut);
+  if (normalized === "nouveau") return item.dateNouveau;
+  if (normalized === "en cours") return item.dateEnCours;
+  if (normalized === "termine") return item.dateTermine;
+  return null;
 };
 
 const buildDrafts = (items: SignalementMapDto[]) =>
@@ -39,6 +63,7 @@ const buildDrafts = (items: SignalementMapDto[]) =>
       surface: item.surface?.toString() ?? "",
       budget: item.budget?.toString() ?? "",
       statutsId: item.statutsId?.toString() ?? "",
+      statutDate: toDateTimeLocalValue(inferStatusDate(item)),
       entrepriseId: item.entrepriseId?.toString() ?? "",
       typeSignalementId: item.typeSignalementId?.toString() ?? "",
     };
@@ -47,6 +72,9 @@ const buildDrafts = (items: SignalementMapDto[]) =>
 
 const numberOrNull = (value: string) =>
   value.trim() === "" ? null : Number(value);
+
+const toIsoLocalDateTime = (value: string) =>
+  value.trim() === "" ? null : `${value}:00`;
 
 const normalizeLabel = (value?: string | null) =>
   (value ?? "")
@@ -176,6 +204,7 @@ export default function ManagerView() {
         surface: numberOrNull(draft.surface),
         budget: numberOrNull(draft.budget),
         statutsId: numberOrNull(draft.statutsId),
+        statutDate: toIsoLocalDateTime(draft.statutDate),
         entrepriseId: numberOrNull(draft.entrepriseId),
         typeSignalementId: numberOrNull(draft.typeSignalementId),
       });
@@ -224,7 +253,7 @@ export default function ManagerView() {
           <h1 className="text-3xl font-bold text-gray-900">Espace Manager</h1>
           <p className="text-gray-600">Gestion et analyse des signalements</p>
         </div>
-        <Link to="/statistiques-delais">
+        <Link to="/dashboard">
           <Button variant="outline" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             Statistiques Délais
@@ -265,6 +294,7 @@ export default function ManagerView() {
                     <th className="px-3 py-2 text-left">Type</th>
                     <th className="px-3 py-2 text-left">Description</th>
                     <th className="px-3 py-2 text-left">Statut</th>
+                    <th className="px-3 py-2 text-left">Date statut</th>
                     <th className="px-3 py-2 text-left">Surface (m²)</th>
                     <th className="px-3 py-2 text-left">Budget</th>
                     <th className="px-3 py-2 text-left">Entreprise</th>
@@ -317,13 +347,32 @@ export default function ManagerView() {
                               )
                             }
                           >
-                            <option value="">-</option>
+                            <option value="">Sélectionner un statut</option>
                             {statuts.map((statut) => (
                               <option key={statut.id} value={statut.id}>
                                 {statut.libelle}
                               </option>
                             ))}
+                            {statuts.length === 0 ? (
+                              <option value="" disabled>
+                                Aucun statut disponible
+                              </option>
+                            ) : null}
                           </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs"
+                            type="datetime-local"
+                            value={draft?.statutDate ?? ""}
+                            onChange={(event) =>
+                              handleDraftChange(
+                                item.id,
+                                "statutDate",
+                                event.target.value,
+                              )
+                            }
+                          />
                         </td>
                         <td className="px-3 py-2">
                           <input
@@ -369,12 +418,17 @@ export default function ManagerView() {
                               )
                             }
                           >
-                            <option value="">-</option>
+                            <option value="">Sélectionner une entreprise</option>
                             {entreprises.map((entreprise) => (
                               <option key={entreprise.id} value={entreprise.id}>
                                 {entreprise.name}
                               </option>
                             ))}
+                            {entreprises.length === 0 ? (
+                              <option value="" disabled>
+                                Aucune entreprise disponible
+                              </option>
+                            ) : null}
                           </select>
                         </td>
                         <td className="px-3 py-2 text-right">
@@ -405,7 +459,7 @@ export default function ManagerView() {
                     <tr>
                       <td
                         className="px-3 py-6 text-center text-sm text-muted-foreground"
-                        colSpan={8}
+                        colSpan={9}
                       >
                         Aucun signalement disponible.
                       </td>
@@ -418,48 +472,6 @@ export default function ManagerView() {
         </CardContent>
       </Card>
 
-      {/* Section de liens rapides */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="pt-6">
-            <h3 className="font-semibold text-blue-900 mb-2">Statistiques Avancées</h3>
-            <p className="text-sm text-blue-700 mb-4">
-              Accédez à des analyses détaillées des délais de traitement
-            </p>
-            <Link to="/statistiques-delais">
-              <Button variant="outline" size="sm" className="w-full">
-                Ouvrir le Dashboard
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-green-50 border-green-200">
-          <CardContent className="pt-6">
-            <h3 className="font-semibold text-green-900 mb-2">Performances</h3>
-            <p className="text-sm text-green-700 mb-2">
-              Délai moyen: {stats?.averageDuration?.toFixed(1) || "N/A"} jours
-            </p>
-            <p className="text-sm text-green-700">
-              Signalements actifs: {signalements.length}
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-purple-50 border-purple-200">
-          <CardContent className="pt-6">
-            <h3 className="font-semibold text-purple-900 mb-2">Actions Rapides</h3>
-            <div className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full">
-                Exporter les données
-              </Button>
-              <Button variant="outline" size="sm" className="w-full">
-                Générer un rapport
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

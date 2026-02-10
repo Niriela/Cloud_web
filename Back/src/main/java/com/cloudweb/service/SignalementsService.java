@@ -127,10 +127,12 @@ public class SignalementsService {
         Signalements saved = signalementsRepository.save(signalement);
         if (statutChanged && newStatut != null) {
             LocalDateTime now = LocalDateTime.now();
+            LocalDateTime selectedStatusDate = request.getStatutDate();
+            LocalDateTime historyDate = selectedStatusDate != null ? selectedStatusDate : now;
             HistoriqueSignalements historique = HistoriqueSignalements.builder()
                     .signalements(saved)
                     .statuts(newStatut)
-                    .date(now)
+                    .date(historyDate)
                     .updatedAt(now)
                     .build();
             historiqueSignalementsRepository.save(historique);

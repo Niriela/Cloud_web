@@ -67,6 +67,9 @@ export type SignalementMapDto = {
   latitude: number | null;
   longitude: number | null;
   date: string | null;
+  dateNouveau: string | null;
+  dateEnCours: string | null;
+  dateTermine: string | null;
   description: string | null;
   surface: number | null;
   budget: number | null;
@@ -183,6 +186,7 @@ export function updateSignalement(
     surface?: number | null;
     budget?: number | null;
     statutsId?: number | null;
+    statutDate?: string | null;
     entrepriseId?: number | null;
     typeSignalementId?: number | null;
   },
@@ -315,4 +319,8 @@ export interface DelaiTraitement {
   entrepriseAssociee: string;
   dateCreation: string;
   dateDerniereModification: string;
+}
+
+export function fetchDelaisTraitement() {
+  return apiRequest<DelaiTraitement[]>("/api/delais/traitement");
 }

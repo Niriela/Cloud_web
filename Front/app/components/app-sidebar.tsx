@@ -48,6 +48,10 @@ const data = {
           url: "/manager",
         },
         {
+          title: "Dashboard",
+          url: "/dashboard",
+        },
+        {
           title: "Gerer les utilisateurs",
           url: "/admin",
         },
