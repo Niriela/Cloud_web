@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS statuts_pourcentage (
     updated_at TIMESTAMP,
     CONSTRAINT fk_statuts_pourcentage_statuts
         FOREIGN KEY (statuts_id) REFERENCES statuts(id)
-)
+);
 
 CREATE TABLE IF NOT EXISTS type_signalement (
     id BIGSERIAL PRIMARY KEY,

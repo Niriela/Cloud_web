@@ -5,12 +5,14 @@ import com.cloudweb.dto.SignalementMapDto;
 import com.cloudweb.dto.SignalementsStatsDto;
 import com.cloudweb.dto.SignalementUpdateRequest;
 import com.cloudweb.entity.Entreprise;
+import com.cloudweb.entity.HistoriqueSignalements;
 import com.cloudweb.entity.PhotoSignalement;
 import com.cloudweb.entity.Point;
 import com.cloudweb.entity.Signalements;
 import com.cloudweb.entity.Statuts;
 import com.cloudweb.entity.TypeSignalement;
 import com.cloudweb.repository.EntrepriseRepository;
+import com.cloudweb.repository.HistoriqueSignalementsRepository;
 import com.cloudweb.repository.PhotoSignalementRepository;
 import com.cloudweb.repository.SignalementsRepository;
 import com.cloudweb.repository.StatutsRepository;
@@ -18,6 +20,7 @@ import com.cloudweb.repository.TypeSignalementRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 
@@ -30,6 +33,7 @@ public class SignalementsService {
     private final EntrepriseRepository entrepriseRepository;
     private final TypeSignalementRepository typeSignalementRepository;
     private final PhotoSignalementRepository photoSignalementRepository;
+    private final HistoriqueSignalementsRepository historiqueSignalementsRepository;
 
     public List<SignalementMapDto> getAllForMap(String statusFilter, String typeFilter) {
         return signalementsRepository.findAll()
@@ -55,12 +59,14 @@ public class SignalementsService {
                 .filter(value -> value != null)
                 .mapToDouble(Double::doubleValue)
                 .sum();
-        long completed = items.stream()
-                .filter(this::isCompleted)
-                .count();
         double advancementPercent = totalPoints == 0
                 ? 0.0
-                : (completed * 100.0) / totalPoints;
+                : items.stream()
+                .map(Signalements::getStatuts)
+                .map(statut -> statut != null ? statut.getLibelle() : null)
+                .mapToDouble(this::progressFromStatus)
+                .average()
+                .orElse(0.0);
 
         return SignalementsStatsDto.builder()
                 .totalPoints(totalPoints)
@@ -84,6 +90,9 @@ public class SignalementsService {
         Signalements signalement = signalementsRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Signalement not found"));
 
+        boolean statutChanged = false;
+        Statuts newStatut = null;
+
         if (request.getSurface() != null) {
             signalement.setSurface(request.getSurface());
         }
@@ -93,6 +102,9 @@ public class SignalementsService {
         if (request.getStatutsId() != null) {
             Statuts statuts = statutsRepository.findById(request.getStatutsId())
                     .orElseThrow(() -> new RuntimeException("Statut not found"));
+            Long previousStatutId = signalement.getStatuts() != null ? signalement.getStatuts().getId() : null;
+            statutChanged = !java.util.Objects.equals(previousStatutId, statuts.getId());
+            newStatut = statuts;
             signalement.setStatuts(statuts);
         }
         if (request.getEntrepriseId() != null) {
@@ -107,7 +119,18 @@ public class SignalementsService {
             signalement.setTypeSignalement(typeSignalement);
         }
 
-        return toMapDto(signalementsRepository.save(signalement));
+        Signalements saved = signalementsRepository.save(signalement);
+        if (statutChanged && newStatut != null) {
+            LocalDateTime now = LocalDateTime.now();
+            HistoriqueSignalements historique = HistoriqueSignalements.builder()
+                    .signalements(saved)
+                    .statuts(newStatut)
+                    .date(now)
+                    .updatedAt(now)
+                    .build();
+            historiqueSignalementsRepository.save(historique);
+        }
+        return toMapDto(saved);
     }
 
     public void deleteSignalement(Long id) {
@@ -121,12 +144,16 @@ public class SignalementsService {
         Statuts statuts = signalement.getStatuts();
         Entreprise entreprise = signalement.getEntreprise();
         TypeSignalement type = signalement.getTypeSignalement();
+        StageDates stageDates = resolveStageDates(signalement);
 
         return SignalementMapDto.builder()
                 .id(signalement.getId())
                 .latitude(point != null ? point.getLatitude() : null)
                 .longitude(point != null ? point.getLongitude() : null)
                 .date(signalement.getDate())
+                .dateNouveau(stageDates.dateNouveau())
+                .dateEnCours(stageDates.dateEnCours())
+                .dateTermine(stageDates.dateTermine())
                 .surface(signalement.getSurface())
                 .budget(signalement.getBudget())
                 .description(signalement.getDescription())
@@ -147,13 +174,76 @@ public class SignalementsService {
                 .build();
     }
 
-    private boolean isCompleted(Signalements signalement) {
-        Statuts statuts = signalement.getStatuts();
-        if (statuts == null || statuts.getLibelle() == null) {
-            return false;
+    private StageDates resolveStageDates(Signalements signalement) {
+        if (signalement == null || signalement.getId() == null) {
+            return new StageDates(null, null, null);
         }
-        String value = statuts.getLibelle().trim().toLowerCase();
-        return "terminé".equals(value) || "termine".equals(value);
+        LocalDateTime dateNouveau = null;
+        LocalDateTime dateEnCours = null;
+        LocalDateTime dateTermine = null;
+
+        List<HistoriqueSignalements> history =
+                historiqueSignalementsRepository.findBySignalementsIdOrderByDateAsc(signalement.getId());
+        for (HistoriqueSignalements item : history) {
+            if (item == null || item.getStatuts() == null) {
+                continue;
+            }
+            LocalDateTime statusDate = item.getDate() != null ? item.getDate() : item.getUpdatedAt();
+            if (statusDate == null) {
+                continue;
+            }
+            String normalized = normalizeLabel(item.getStatuts().getLibelle());
+            if (dateNouveau == null && "nouveau".equals(normalized)) {
+                dateNouveau = statusDate;
+            }
+            if (dateEnCours == null && "en cours".equals(normalized)) {
+                dateEnCours = statusDate;
+            }
+            if (dateTermine == null && "termine".equals(normalized)) {
+                dateTermine = statusDate;
+            }
+        }
+
+        if (dateNouveau == null) {
+            String current = normalizeLabel(signalement.getStatuts() != null ? signalement.getStatuts().getLibelle() : null);
+            if ("nouveau".equals(current)) {
+                dateNouveau = signalement.getDate();
+            }
+        }
+
+        return new StageDates(dateNouveau, dateEnCours, dateTermine);
+    }
+
+    private double progressFromStatus(String status) {
+        String value = normalizeLabel(status);
+        if ("termine".equals(value)) {
+            return 100.0;
+        }
+        if ("en cours".equals(value)) {
+            return 50.0;
+        }
+        return 0.0;
+    }
+
+    private String normalizeLabel(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim()
+                .toLowerCase(Locale.ROOT)
+                .replace("é", "e")
+                .replace("è", "e")
+                .replace("ê", "e")
+                .replace("ë", "e")
+                .replace("à", "a")
+                .replace("â", "a")
+                .replace("î", "i")
+                .replace("ï", "i")
+                .replace("ô", "o")
+                .replace("ö", "o")
+                .replace("ù", "u")
+                .replace("û", "u")
+                .replace("ü", "u");
     }
 
     private boolean matchesFilters(Signalements signalement, String statusFilter, String typeFilter) {
@@ -182,5 +272,8 @@ public class SignalementsService {
         }
         return left.trim().toLowerCase(Locale.ROOT)
                 .equals(right.trim().toLowerCase(Locale.ROOT));
+    }
+
+    private record StageDates(LocalDateTime dateNouveau, LocalDateTime dateEnCours, LocalDateTime dateTermine) {
     }
 }

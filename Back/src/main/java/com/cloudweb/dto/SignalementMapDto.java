@@ -16,6 +16,9 @@ public class SignalementMapDto {
     private Double latitude;
     private Double longitude;
     private LocalDateTime date;
+    private LocalDateTime dateNouveau;
+    private LocalDateTime dateEnCours;
+    private LocalDateTime dateTermine;
     private Double surface;
     private Double budget;
     private String description;
