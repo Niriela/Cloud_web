@@ -1,5 +1,10 @@
 import { useParams, useLoaderData, Link } from "react-router-dom";
-import { getSignalements, type SignalementMapDto } from "~/lib/api";
+import { 
+  getSignalements, 
+  getSignalementPhotos, 
+  type SignalementMapDto, 
+  type PhotoSignalementDto 
+} from "~/lib/api";
 import { AppSidebar } from "~/components/app-sidebar";
 import {
   SidebarProvider,
@@ -18,17 +23,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Camera, MapPin, Calendar, DollarSign, Ruler } from "lucide-react";
-
-// Importez votre propre Badge ou utilisez une solution temporaire
-// Créez d'abord le composant Badge (voir instructions ci-dessus)
-
-// Types pour les photos simulées
-interface Photo {
-  id: number;
-  url: string;
-  description: string;
-  date: string;
-}
+import { EmptyState } from "~/components/ui/empty-state";
 
 // Solution temporaire si vous ne voulez pas créer le composant Badge
 // Créez un Badge simple en attendant
@@ -37,25 +32,6 @@ const SimpleBadge = ({ children, className = "" }: { children: React.ReactNode, 
     {children}
   </span>
 );
-
-// Générer des photos simulées
-const generateMockPhotos = (signalementId: number): Photo[] => {
-  const photoTypes = [
-    { desc: "Vue d'ensemble", emoji: "📷" },
-    { desc: "Détail du problème", emoji: "🔍" },
-    { desc: "Zone environnante", emoji: "🌍" },
-    { desc: "Avant intervention", emoji: "⏪" },
-    { desc: "Pendant les travaux", emoji: "⚒️" },
-    { desc: "Après réparation", emoji: "✅" },
-  ];
-
-  return photoTypes.slice(0, 3 + (signalementId % 4)).map((type, index) => ({
-    id: index + 1,
-    url: `https://picsum.photos/400/300?random=${signalementId}${index}&sig=${Date.now()}`,
-    description: `${type.emoji} ${type.desc} - Signalement #${signalementId}`,
-    date: new Date(Date.now() - (index * 86400000)).toISOString().split('T')[0],
-  }));
-};
 
 // Loader
 export async function loader({ params }: { params: { id: string } }) {
@@ -67,9 +43,18 @@ export async function loader({ params }: { params: { id: string } }) {
       throw new Response("Signalement non trouvé", { status: 404 });
     }
     
+    // Récupérer les vraies photos via API
+    let photos: PhotoSignalementDto[] = [];
+    try {
+      photos = await getSignalementPhotos(signalement.id);
+    } catch (error) {
+      console.error("Erreur lors du chargement des photos:", error);
+      // Les photos restent un tableau vide en cas d'erreur
+    }
+    
     return { 
       signalement,
-      photos: generateMockPhotos(signalement.id)
+      photos
     };
   } catch (error) {
     throw new Response("Erreur de chargement", { status: 500 });
@@ -80,7 +65,7 @@ export default function SignalementDetailPage() {
   const { id } = useParams();
   const { signalement, photos } = useLoaderData() as { 
     signalement: SignalementMapDto; 
-    photos: Photo[] 
+    photos: PhotoSignalementDto[] 
   };
 
   const getStatusColor = (status: string | null) => {
@@ -207,9 +192,11 @@ export default function SignalementDetailPage() {
                         <Camera className="h-5 w-5" />
                         Galerie photos
                       </CardTitle>
-                      <SimpleBadge className="bg-gray-100 text-gray-800 border-gray-200">
-                        {photos.length} photo{photos.length > 1 ? 's' : ''}
-                      </SimpleBadge>
+                      {photos.length > 0 && (
+                        <SimpleBadge className="bg-blue-100 text-blue-800 border-blue-200">
+                          {photos.length} photo{photos.length > 1 ? 's' : ''}
+                        </SimpleBadge>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="p-6">
@@ -223,34 +210,54 @@ export default function SignalementDetailPage() {
                             <div className="aspect-[4/3] overflow-hidden">
                               <img
                                 src={photo.url}
-                                alt={photo.description}
+                                alt={`Photo du signalement #${signalement.id}`}
                                 className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                                 loading="lazy"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.src = "https://via.placeholder.com/400x300?text=Image+Indisponible";
+                                }}
                               />
                             </div>
                             <div className="p-3">
-                              <p className="text-sm font-medium text-gray-900 line-clamp-1">
-                                {photo.description}
+                              <p className="text-sm font-medium text-gray-900">
+                                Photo #{photo.id}
                               </p>
                               <p className="text-xs text-gray-500 mt-1">
-                                Ajoutée le {formatDate(photo.date)}
+                                {photo.updatedAt 
+                                  ? new Date(photo.updatedAt).toLocaleDateString('fr-FR')
+                                  : 'Date inconnue'}
                               </p>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-12">
-                        <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                          <Camera className="h-8 w-8 text-gray-400" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                          Aucune photo disponible
-                        </h3>
-                        <p className="text-gray-600">
-                          Aucune photo n'a été ajoutée pour ce signalement.
-                        </p>
-                      </div>
+                      <EmptyState
+                        title="Aucune photo disponible"
+                        description="Ce signalement n'a pas encore de photos associées. Les photos seront ajoutées par l'équipe de gestion."
+                        icon={
+                          <div className="mx-auto w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 border-2 border-gray-300">
+                            <Camera className="h-8 w-8 text-gray-400" />
+                          </div>
+                        }
+                        action={
+                          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            <Button variant="outline" className="gap-2">
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Signaler l'absence de photos
+                            </Button>
+                            <Button asChild variant="ghost" className="gap-2">
+                              <Link to="/Visiteurs">
+                                <ArrowLeft className="h-4 w-4" />
+                                Voir d'autres signalements
+                              </Link>
+                            </Button>
+                          </div>
+                        }
+                      />
                     )}
                   </CardContent>
                 </Card>

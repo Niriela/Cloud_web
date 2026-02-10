@@ -24,6 +24,47 @@
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }
 
+/* Ajouter ces styles à la fin du fichier */
+
+.photo-gallery {
+  width: 100%;
+}
+
+.photo-item {
+  transition: transform 0.2s ease;
+}
+
+.photo-item:hover {
+  transform: translateY(-2px);
+}
+
+.photo-item img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+/* Styles pour le modal */
+[data-slot="dialog-content"] {
+  padding: 0 !important;
+}
+
+[data-slot="dialog-header"] {
+  padding: 1.5rem 1.5rem 1rem;
+}
+
+/* Responsive pour les images */
+@media (max-width: 768px) {
+  .photo-gallery .grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .photo-item img {
+    height: 180px;
+  }
+}
+
 /* responsive */
 @media (max-width: 800px) {
   .visiteurs-page { flex-direction: column; height: auto; }
